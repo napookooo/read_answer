@@ -67,6 +67,26 @@ void Image_create(Image *img, int width, int height, int channels, bool zeroed) 
     }
 }
 
+void Image_grayscale(Image* img) {
+    if (!img || !img->data || img->channels < 3) return;
+
+    int pixel_count = img->width * img->height;
+
+    for (int i = 0; i < pixel_count; ++i) {
+        int idx = i * img->channels;
+
+        uint8_t r = img->data[idx + 0];
+        uint8_t g = img->data[idx + 1];
+        uint8_t b = img->data[idx + 2];
+
+        uint8_t gray = (uint8_t)(0.299f * r + 0.587f * g + 0.114f * b);
+
+        img->data[idx + 0] = gray;
+        img->data[idx + 1] = gray;
+        img->data[idx + 2] = gray;
+    }
+}
+
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
@@ -74,25 +94,10 @@ int main(int argc, char *argv[]) {
 
   Image_load(&test, file_loc);
 
-
-  // for (int i=0; i<test.size; i++){
-  //   printf("%d\n", test.data[i]);
-  // }
-
-  Image grey;
-  int channels = test.channels == 4 ? 2 : 1;
-  Image_create(&grey, test.width, test.height, channels, false);
-  for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
-        *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
-        if(test.channels == 4) {
-            *(pg + 1) = *(p + 3);
-        }
-    }
-
-  Image_save(&grey, save_loc);
+  Image_grayscale(&test);
+  Image_save(&test, save_loc);
 
   Image_free(&test);
-  Image_free(&grey);
 
   return 0;
 }
