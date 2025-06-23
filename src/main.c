@@ -70,29 +70,38 @@ void Image_create(Image *img, int width, int height, int channels, bool zeroed) 
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
-  char *save_loc = "./pict/test.png";
+  char *save_loc1 = "./pict/crop1.png";
 
   Image_load(&test, file_loc);
 
 
-  // for (int i=0; i<test.size; i++){
-  //   printf("%d\n", test.data[i]);
+  // ## Grey scale ##
+  // Image grey;
+  // int channels = test.channels == 4 ? 2 : 1;
+  // Image_create(&grey, test.width, test.height, channels, false);
+  // for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
+  //   *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
+  //   if(test.channels == 4) {
+  //     *(pg + 1) = *(p + 3);
+  //   }
   // }
 
-  Image grey;
-  int channels = test.channels == 4 ? 2 : 1;
-  Image_create(&grey, test.width, test.height, channels, false);
-  for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
-        *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
-        if(test.channels == 4) {
-            *(pg + 1) = *(p + 3);
-        }
+  // ## Crop 1 ##
+  Image test2;
+  Image_create(&test2, 700, 670, test.channels, false);
+  for (int i = 0; i < test2.height; i++) {
+    for (int j = 0; j < test2.width; j++) {
+      //                                                                   y                      x
+      test2.data[(i * test2.width + j) * test.channels + 1] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 1];
+      test2.data[(i * test2.width + j) * test.channels + 2] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 2];
+      test2.data[(i * test2.width + j) * test.channels + 3] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 3];
     }
+  }
 
-  Image_save(&grey, save_loc);
+  Image_save(&test2, save_loc1);
 
   Image_free(&test);
-  Image_free(&grey);
+  // Image_free(&grey);
 
   return 0;
 }
