@@ -50,6 +50,23 @@ void Image_free(Image *img) {
     }
 }
 
+void Image_create(Image *img, int width, int height, int channels, bool zeroed) {
+    size_t size = width * height * channels;
+    if(zeroed) {
+        img->data = calloc(size, 1);
+    } else {
+        img->data = malloc(size);
+    }
+
+    if(img->data != NULL) {
+        img->width = width;
+        img->height = height;
+        img->size = size;
+        img->channels = channels;
+        img->allocation_ = SELF_ALLOCATED;
+    }
+}
+
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
@@ -57,9 +74,25 @@ int main(int argc, char *argv[]) {
 
   Image_load(&test, file_loc);
 
-  Image_save(&test, save_loc);
+
+  // for (int i=0; i<test.size; i++){
+  //   printf("%d\n", test.data[i]);
+  // }
+
+  Image grey;
+  int channels = test.channels == 4 ? 2 : 1;
+  Image_create(&grey, test.width, test.height, channels, false);
+  for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
+        *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
+        if(test.channels == 4) {
+            *(pg + 1) = *(p + 3);
+        }
+    }
+
+  Image_save(&grey, save_loc);
 
   Image_free(&test);
+  Image_free(&grey);
 
   return 0;
 }
