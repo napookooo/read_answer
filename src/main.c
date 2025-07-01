@@ -1,4 +1,5 @@
 
+#include <fenv.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -10,6 +11,8 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+
+#define TrueColor(x) ((x) < 127) ? 255 : 0
 
 enum allocation_type {
     NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
@@ -67,24 +70,91 @@ void Image_create(Image *img, int width, int height, int channels, bool zeroed) 
     }
 }
 
+// fuck me
+int inside(const int x, const int y, const int w, const int h){
+  return x>=0 && y>=0 && x<w && y<h;
+}
+
+typedef struct {
+  int x, y;
+} Point;
+
+void Contour(Image *img, int *visited, Point *contour, int *contour_len) {
+  int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
+  
+  for (int y=0; y<img->height; y++){
+    for (int x=0; x<img->width; x++){
+      if(img->data[y*img->width+x]==255 && !visited[y*img->width+x]){
+        int func_x = x, func_y = y;
+        int dir_ind = 0;
+        int start_x = x, start_y = y;
+
+        do{
+          contour[*contour_len].x = func_x;
+          contour[*contour_len].y = func_y;
+          (*contour_len)++;
+          visited[func_y*img->width+func_x] = 1;
+          int found = 0;
+          for (int i = 0; i < 8; i++) {
+            int nd = (dir_ind + i) % 8;
+            int nx = x + direction[nd][0];
+            int ny = y + direction[nd][1];
+            if (inside(nx, ny, img->width, img->height) && img->data[ny*img->width+nx] == 255 && !visited[ny*img->width*nx]) {
+              img->data[nx + 0] = 255;
+              img->data[nx + 1] = 255;
+              img->data[nx + 2] = 0;
+              func_x = nx;
+              func_y = ny;
+              dir_ind = (nd + 6) % 8; // turn left
+              found = 1;
+              break;
+            }
+          }
+          if (!found) break;
+        }while (!(func_x == start_x && func_y == start_y));
+      }
+    }
+  }
+
+}
+
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
-  char *save_loc1 = "./pict/crop1.png";
+  char *save_img = "./pict/test.png";
+  char *save_crop = "./pict/crop1.png";
 
   Image_load(&test, file_loc);
 
 
   // ## Grey scale ##
-  // Image grey;
-  // int channels = test.channels == 4 ? 2 : 1;
-  // Image_create(&grey, test.width, test.height, channels, false);
-  // for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
-  //   *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
-  //   if(test.channels == 4) {
-  //     *(pg + 1) = *(p + 3);
-  //   }
-  // }
+  Image grey;
+  int channels = test.channels == 4 ? 2 : 1;
+  Image_create(&grey, test.width, test.height, channels, false);
+  for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
+    *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
+    if(test.channels == 4) {
+      *(pg + 1) = *(p + 3);
+    }
+  }
+  // ## Inverse color ##
+  for (int i = 0; i < grey.width*grey.height; ++i) {
+    int idx = i * grey.channels;
+    grey.data[idx + 0] = TrueColor(grey.data[idx+0]);
+    grey.data[idx + 1] = TrueColor(grey.data[idx+1]);
+    grey.data[idx + 2] = TrueColor(grey.data[idx+2]);
+  }
+  int *visited = calloc(grey.width * grey.height, sizeof(int));
+  Point *contour = malloc(grey.width * grey.height * sizeof(Point));
+  int contour_len = 0;
+
+  Contour(&grey, visited, contour, &contour_len);
+
+  printf("Found contour with %d points:\n", contour_len);
+  for (int i = 0; i < contour_len; i++) {
+    printf("(%d, %d)\n", contour[i].x, contour[i].y);
+  }
+
 
   // ## Crop 1 ##
   Image test2;
@@ -98,10 +168,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  Image_save(&test2, save_loc1);
+  Image_save(&grey, save_img);
+  Image_save(&test2, save_crop);
 
   Image_free(&test);
-  // Image_free(&grey);
+  Image_free(&grey);
 
   return 0;
 }
