@@ -1,5 +1,3 @@
-
-#include <fenv.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -55,12 +53,7 @@ void Image_free(Image *img) {
 
 void Image_create(Image *img, int width, int height, int channels, bool zeroed) {
     size_t size = width * height * channels;
-    if(zeroed) {
-        img->data = calloc(size, 1);
-    } else {
-        img->data = malloc(size);
-    }
-
+    img->data = zeroed ? calloc(size, 1) : malloc(size);
     if(img->data != NULL) {
         img->width = width;
         img->height = height;
@@ -79,43 +72,58 @@ typedef struct {
   int x, y;
 } Point;
 
-void Contour(Image *img, int *visited, Point *contour, int *contour_len) {
+void Contour(Image *out, Image *img, int *visited, Point *contour, int *contour_len, int mcontour_len) {
   int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
-  
-  for (int y=0; y<img->height; y++){
-    for (int x=0; x<img->width; x++){
-      if(img->data[y*img->width+x]==255 && !visited[y*img->width+x]){
-        int func_x = x, func_y = y;
-        int dir_ind = 0;
-        int start_x = x, start_y = y;
+  int ccount = 0;
 
-        do{
+  for (int y = 0; y < img->height; y++) {
+    for (int x = 0; x < img->width; x++) {
+      int idx = y * img->width + x;
+      if (img->data[idx * img->channels] == 255 && !visited[idx]) {
+        int func_x = x, func_y = y;
+        // int dir_ind = 0;
+        int start_x = x, start_y = y;
+        int mstep = img->width * img->height;
+        int yesc = 0;
+
+        do {
+          if (!inside(func_x, func_y, img->width, img->height)) break;
+          if (*contour_len >= mcontour_len) break;
+
           contour[*contour_len].x = func_x;
           contour[*contour_len].y = func_y;
           (*contour_len)++;
-          visited[func_y*img->width+func_x] = 1;
+          visited[func_y * img->width + func_x] = 1;
+
           int found = 0;
           for (int i = 0; i < 8; i++) {
-            int nd = (dir_ind + i) % 8;
-            int nx = x + direction[nd][0];
-            int ny = y + direction[nd][1];
-            if (inside(nx, ny, img->width, img->height) && img->data[ny*img->width+nx] == 255 && !visited[ny*img->width*nx]) {
-              img->data[nx + 0] = 255;
-              img->data[nx + 1] = 255;
-              img->data[nx + 2] = 0;
+            int nx = func_x + direction[i][0];
+            int ny = func_y + direction[i][1];
+            int nidx = ny * img->width + nx;
+
+            if (inside(nx, ny, img->width, img->height) && img->data[nidx * img->channels] == 255 && !visited[nidx]) {
+              out->data[nidx*out->channels + 0] = ccount%2 ? 255 : 0;
+              out->data[nidx*out->channels + 1] = 0;
+              out->data[nidx*out->channels + 2] = ccount%2 ? 0 : 255;
               func_x = nx;
               func_y = ny;
-              dir_ind = (nd + 6) % 8; // turn left
+              // dir_ind = (nd + 6) % 8;
               found = 1;
+              yesc = 1;
               break;
             }
           }
-          if (!found) break;
-        }while (!(func_x == start_x && func_y == start_y));
+
+          if (!found || --mstep <= 0) break;
+        } while (!(func_x == start_x && func_y == start_y));
+        if(yesc){
+          // printf("found contpur\n");
+          ccount++;
+        }
       }
     }
   }
-
+  printf("count %d\n", ccount);
 }
 
 int main(int argc, char *argv[]) {
@@ -126,53 +134,49 @@ int main(int argc, char *argv[]) {
 
   Image_load(&test, file_loc);
 
+  // ## Crop 1 ##
+  Image crop1;
+  Image_create(&crop1, 700, 670, test.channels, false);
+  for (int i = 0; i < crop1.height; i++) {
+    for (int j = 0; j < crop1.width; j++) {
+      //                                                                   y                      x
+      crop1.data[(i * crop1.width + j) * crop1.channels + 0] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 0];
+      crop1.data[(i * crop1.width + j) * crop1.channels + 1] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 1];
+      crop1.data[(i * crop1.width + j) * crop1.channels + 2] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 2];
+    }
+  }
 
   // ## Grey scale ##
   Image grey;
-  int channels = test.channels == 4 ? 2 : 1;
-  Image_create(&grey, test.width, test.height, channels, false);
-  for(unsigned char *p = test.data, *pg = grey.data; p != test.data + test.size; p += test.channels, pg += grey.channels) {
-    *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
-    if(test.channels == 4) {
-      *(pg + 1) = *(p + 3);
-    }
+  int channels = crop1.channels == 4 ? 2 : 1;
+  Image_create(&grey, crop1.width, crop1.height, channels, false);
+  for (unsigned char *p = crop1.data, *pg = grey.data;
+       p < crop1.data + crop1.size;
+       p += crop1.channels, pg += channels) {
+    *pg = (uint8_t)((p[0] + p[1] + p[2]) / 3);
+    if (channels == 2) pg[1] = p[3];
   }
-  // ## Inverse color ##
-  for (int i = 0; i < grey.width*grey.height; ++i) {
-    int idx = i * grey.channels;
-    grey.data[idx + 0] = TrueColor(grey.data[idx+0]);
-    grey.data[idx + 1] = TrueColor(grey.data[idx+1]);
-    grey.data[idx + 2] = TrueColor(grey.data[idx+2]);
+  for (int i = 0; i < grey.width * grey.height; ++i) {
+    grey.data[i * channels] = TrueColor(grey.data[i * channels]);
+    if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
   }
-  int *visited = calloc(grey.width * grey.height, sizeof(int));
-  Point *contour = malloc(grey.width * grey.height * sizeof(Point));
+
+  int mcontour_len = grey.width * grey.height;
+  int *visited = calloc(mcontour_len, sizeof(int));
+  Point *contour = malloc(mcontour_len * sizeof(Point));
   int contour_len = 0;
 
-  Contour(&grey, visited, contour, &contour_len);
+  Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
+  printf("contour %d\n", contour_len);
 
-  printf("Found contour with %d points:\n", contour_len);
-  for (int i = 0; i < contour_len; i++) {
-    printf("(%d, %d)\n", contour[i].x, contour[i].y);
-  }
-
-
-  // ## Crop 1 ##
-  Image test2;
-  Image_create(&test2, 700, 670, test.channels, false);
-  for (int i = 0; i < test2.height; i++) {
-    for (int j = 0; j < test2.width; j++) {
-      //                                                                   y                      x
-      test2.data[(i * test2.width + j) * test.channels + 1] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 1];
-      test2.data[(i * test2.width + j) * test.channels + 2] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 2];
-      test2.data[(i * test2.width + j) * test.channels + 3] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 3];
-    }
-  }
-
-  Image_save(&grey, save_img);
-  Image_save(&test2, save_crop);
+  Image_save(&test, save_img);
+  Image_save(&crop1, save_crop);
 
   Image_free(&test);
+  Image_free(&crop1);
   Image_free(&grey);
+  free(visited);
+  free(contour);
 
   return 0;
 }

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c18 -Werror -O7 -fsanitize=address -Wall
+CFLAGS=-std=c18 -Werror -O7 -fsanitize=address -Wall -fno-omit-frame-pointer
 FLAGS=-lm
 SRCDIR=src
 BUILDDIR=build
