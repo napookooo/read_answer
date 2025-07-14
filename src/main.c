@@ -72,58 +72,65 @@ typedef struct {
   int x, y;
 } Point;
 
-void Contour(Image *out, Image *img, int *visited, Point *contour, int *contour_len, int mcontour_len) {
-  int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
-  int ccount = 0;
+// void Contour(Image *out, Image *img, int *visited, Point *contour, int *contour_len, int mcontour_len) {
+//   int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
+//   int ccount = 0;
 
-  for (int y = 0; y < img->height; y++) {
-    for (int x = 0; x < img->width; x++) {
-      int idx = y * img->width + x;
-      if (img->data[idx * img->channels] == 255 && !visited[idx]) {
-        int func_x = x, func_y = y;
-        // int dir_ind = 0;
-        int start_x = x, start_y = y;
-        int mstep = img->width * img->height;
-        int yesc = 0;
+//   for (int y = 0; y < img->height; y++) {
+//     for (int x = 0; x < img->width; x++) {
+//       int idx = y * img->width + x;
+//       if (img->data[idx * img->channels] == 255 && !visited[idx]) {
+//         int func_x = x, func_y = y;
+//         // int dir_ind = 0;
+//         int start_x = x, start_y = y;
+//         int mstep = img->width * img->height;
+//         int yesc = 0;
 
-        do {
-          if (!inside(func_x, func_y, img->width, img->height)) break;
-          if (*contour_len >= mcontour_len) break;
+//         do {
+//           if (!inside(func_x, func_y, img->width, img->height)) break;
+//           if (*contour_len >= mcontour_len) break;
 
-          contour[*contour_len].x = func_x;
-          contour[*contour_len].y = func_y;
-          (*contour_len)++;
-          visited[func_y * img->width + func_x] = 1;
+//           contour[*contour_len].x = func_x;
+//           contour[*contour_len].y = func_y;
+//           (*contour_len)++;
+//           visited[func_y * img->width + func_x] = 1;
 
-          int found = 0;
-          for (int i = 0; i < 8; i++) {
-            int nx = func_x + direction[i][0];
-            int ny = func_y + direction[i][1];
-            int nidx = ny * img->width + nx;
+//           int found = 0;
+//           for (int i = 0; i < 8; i++) {
+//             int nx = func_x + direction[i][0];
+//             int ny = func_y + direction[i][1];
+//             int nidx = ny * img->width + nx;
 
-            if (inside(nx, ny, img->width, img->height) && img->data[nidx * img->channels] == 255 && !visited[nidx]) {
-              out->data[nidx*out->channels + 0] = ccount%2 ? 255 : 0;
-              out->data[nidx*out->channels + 1] = 0;
-              out->data[nidx*out->channels + 2] = ccount%2 ? 0 : 255;
-              func_x = nx;
-              func_y = ny;
-              // dir_ind = (nd + 6) % 8;
-              found = 1;
-              yesc = 1;
-              break;
-            }
-          }
+//             if (inside(nx, ny, img->width, img->height) && img->data[nidx * img->channels] == 255 && !visited[nidx]) {
+//               out->data[nidx*out->channels + 0] = ccount%2 ? 255 : 0;
+//               out->data[nidx*out->channels + 1] = 0;
+//               out->data[nidx*out->channels + 2] = ccount%2 ? 0 : 255;
+//               func_x = nx;
+//               func_y = ny;
+//               // dir_ind = (nd + 6) % 8;
+//               found = 1;
+//               yesc = 1;
+//               break;
+//             }
+//           }
 
-          if (!found || --mstep <= 0) break;
-        } while (!(func_x == start_x && func_y == start_y));
-        if(yesc){
-          // printf("found contpur\n");
-          ccount++;
-        }
-      }
-    }
-  }
-  printf("count %d\n", ccount);
+//           if (!found || --mstep <= 0) break;
+//         } while (!(func_x == start_x && func_y == start_y));
+//         if(yesc){
+//           // printf("found contpur\n");
+//           ccount++;
+//         }
+//       }
+//     }
+//   }
+//   printf("count %d\n", ccount);
+// }
+
+void Image_crop(Image* cropped, Image* image, int x, int y){
+    for (int i = 0; i < cropped->height; i++)
+    for (int j = 0; j < cropped->width; j++)
+    for (int c = 0; c < image->channels; c++)
+    cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
 }
 
 int main(int argc, char *argv[]) {
@@ -137,14 +144,7 @@ int main(int argc, char *argv[]) {
   // ## Crop 1 ##
   Image crop1;
   Image_create(&crop1, 700, 670, test.channels, false);
-  for (int i = 0; i < crop1.height; i++) {
-    for (int j = 0; j < crop1.width; j++) {
-      //                                                                   y                      x
-      crop1.data[(i * crop1.width + j) * crop1.channels + 0] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 0];
-      crop1.data[(i * crop1.width + j) * crop1.channels + 1] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 1];
-      crop1.data[(i * crop1.width + j) * crop1.channels + 2] = test.data[((650 + i) * test.width + 10 + j) * test.channels + 2];
-    }
-  }
+  Image_crop(&crop1, &test, 10, 650);
 
   // ## Grey scale ##
   Image grey;
@@ -161,13 +161,13 @@ int main(int argc, char *argv[]) {
     if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
   }
 
-  int mcontour_len = grey.width * grey.height;
-  int *visited = calloc(mcontour_len, sizeof(int));
-  Point *contour = malloc(mcontour_len * sizeof(Point));
-  int contour_len = 0;
+//   int mcontour_len = grey.width * grey.height;
+//   int *visited = calloc(mcontour_len, sizeof(int));
+//   Point *contour = malloc(mcontour_len * sizeof(Point));
+//   int contour_len = 0;
 
-  Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
-  printf("contour %d\n", contour_len);
+//   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
+//   printf("contour %d\n", contour_len);
 
   Image_save(&test, save_img);
   Image_save(&crop1, save_crop);
@@ -175,8 +175,8 @@ int main(int argc, char *argv[]) {
   Image_free(&test);
   Image_free(&crop1);
   Image_free(&grey);
-  free(visited);
-  free(contour);
+//   free(visited);
+//   free(contour);
 
   return 0;
 }
