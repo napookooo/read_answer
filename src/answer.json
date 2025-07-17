@@ -1,7 +1,7 @@
 {
     "Formats":[
         {
-            "Grid":{
+            "Question":{
                 "Column":13,
                 "Row":1,
                 "X":76,
@@ -18,21 +18,25 @@
                 "WidthNext":0,
                 "HeightNext":45,
                 "Follow":"DownYNoX"
-            }
+            },
+            "Sheet":{
+                "Column":4,
+                "Row":9,
+                "X":736,
+                "Y":139,
+                "WidthNext":672,
+                "HeightNext":249,
+                "Follow":"DownYRightX"
+            },
+            "SubjectUse":[
+                "10"
+            ]
         }
     ],
     "Subjects":{
         "10":{
             "Questions":30,
             "MaxScore":30,
-            "GridColumn":4,
-            "GridRow":9,
-            "GridX":736,
-            "GridY":139,
-            "GridWidthNext":672,
-            "GridHeightNext":249,
-            "GridFollow":"DownYRightX",
-            "Format":0,
             "SubQuestions":5,
             "Possibles":["+","-","±","0","1","2","3","4","5","6","7","8","9"],
             "AnswerList":[
