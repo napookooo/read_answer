@@ -11,6 +11,8 @@
 #include <stdio.h>
 
 #define TrueColor(x) ((x) < 127) ? 255 : 0
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 enum allocation_type {
     NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
@@ -127,10 +129,22 @@ typedef struct {
 // }
 
 void Image_crop(Image* cropped, Image* image, int x, int y){
-    for (int i = 0; i < cropped->height; i++)
-    for (int j = 0; j < cropped->width; j++)
-    for (int c = 0; c < image->channels; c++)
-    cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
+  for (int i = 0; i < cropped->height; i++)
+  for (int j = 0; j < cropped->width; j++)
+  for (int c = 0; c < image->channels; c++)
+  cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
+}
+
+void Image_write_color(Image* img, int x, int y, int width, int height, int r, int g, int b, float intensity){
+  int min_x = MIN(img->width, x+width);
+  int min_y = MIN(img->height, y+height);
+  for (int i = y; i < min_y; i++)
+  for (int j = x; j < min_x; j++)
+  {
+    if (r >= 0 && r <= 255) img->data[(i * img->width + j) * img->channels] = (char)(r * intensity + img->data[(i * img->width + j) * img->channels] * (1.0f - intensity));
+    if (g >= 0 && g <= 255) img->data[(i * img->width + j) * img->channels + 1] = (char)(g * intensity + img->data[(i * img->width + j) * img->channels + 1] * (1.0f - intensity));
+    if (b >= 0 && b <= 255) img->data[(i * img->width + j) * img->channels + 2] = (char)(b * intensity + img->data[(i * img->width + j) * img->channels + 2] * (1.0f - intensity));
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -145,21 +159,22 @@ int main(int argc, char *argv[]) {
   Image crop1;
   Image_create(&crop1, 700, 670, test.channels, false);
   Image_crop(&crop1, &test, 10, 650);
+  Image_write_color(&crop1, 0, 0, 700, 670, -1, 255, -1, 0.7f);
 
   // ## Grey scale ##
-  Image grey;
-  int channels = crop1.channels == 4 ? 2 : 1;
-  Image_create(&grey, crop1.width, crop1.height, channels, false);
-  for (unsigned char *p = crop1.data, *pg = grey.data;
-       p < crop1.data + crop1.size;
-       p += crop1.channels, pg += channels) {
-    *pg = (uint8_t)((p[0] + p[1] + p[2]) / 3);
-    if (channels == 2) pg[1] = p[3];
-  }
-  for (int i = 0; i < grey.width * grey.height; ++i) {
-    grey.data[i * channels] = TrueColor(grey.data[i * channels]);
-    if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
-  }
+  // Image grey;
+  // int channels = crop1.channels == 4 ? 2 : 1;
+  // Image_create(&grey, crop1.width, crop1.height, channels, false);
+  // for (unsigned char *p = crop1.data, *pg = grey.data;
+  //      p < crop1.data + crop1.size;
+  //      p += crop1.channels, pg += channels) {
+  //   *pg = (uint8_t)((p[0] + p[1] + p[2]) / 3);
+  //   if (channels == 2) pg[1] = p[3];
+  // }
+  // for (int i = 0; i < grey.width * grey.height; ++i) {
+  //   grey.data[i * channels] = TrueColor(grey.data[i * channels]);
+  //   if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
+  // }
 
 //   int mcontour_len = grey.width * grey.height;
 //   int *visited = calloc(mcontour_len, sizeof(int));
@@ -174,7 +189,7 @@ int main(int argc, char *argv[]) {
 
   Image_free(&test);
   Image_free(&crop1);
-  Image_free(&grey);
+  // Image_free(&grey);
 //   free(visited);
 //   free(contour);
 
