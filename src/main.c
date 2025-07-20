@@ -147,6 +147,37 @@ void Image_write_color(Image* img, int x, int y, int width, int height, int r, i
   }
 }
 
+void Image_greyscale(Image* img){
+  for (int i = 0; i < img->height; i++)
+  for (int j = 0; j < img->width; j++)
+  {
+    char r = img->data[(i * img->width + j) * img->channels];
+    char g = img->data[(i * img->width + j) * img->channels + 1];
+    char b = img->data[(i * img->width + j) * img->channels + 2];
+    char gray = (char)(0.299f * r + 0.587f * g + 0.114f * b);
+    img->data[(i * img->width + j) * img->channels] = gray;
+    img->data[(i * img->width + j) * img->channels + 1] = gray;
+    img->data[(i * img->width + j) * img->channels + 2] = gray;
+  }
+}
+
+bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value){
+  int area = width * height;
+  int shade = 0;
+  unsigned char calculated_value = 0;
+
+  int min_x = MIN(img->width, x+width);
+  int min_y = MIN(img->height, y+height);
+  for (int i = y; i < min_y; i++)
+  for (int j = x; j < min_x; j++)
+  {
+    shade += img->data[(i * img->width + j) * img->channels];
+  }
+  calculated_value = shade / area;
+  if (calculated_value >= pass_value) return true;
+  return false;
+}
+
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
@@ -157,9 +188,12 @@ int main(int argc, char *argv[]) {
 
   // ## Crop 1 ##
   Image crop1;
-  Image_create(&crop1, 700, 670, test.channels, false);
-  Image_crop(&crop1, &test, 10, 650);
+  Image_create(&crop1, 35, 35, test.channels, false);
+  Image_crop(&crop1, &test, 1658, 138);
+  Image_greyscale(&test);
   Image_write_color(&crop1, 0, 0, 700, 670, -1, 255, -1, 0.7f);
+  bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
+  printf("%i",is_black);
 
   // ## Grey scale ##
   // Image grey;
