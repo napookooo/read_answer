@@ -2,6 +2,7 @@
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#include "cJSON.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -11,6 +12,7 @@
 #include <stdio.h>
 
 #define TrueColor(x) ((x) < 127) ? 255 : 0
+#define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -141,9 +143,9 @@ void Image_write_color(Image* img, int x, int y, int width, int height, int r, i
   for (int i = y; i < min_y; i++)
   for (int j = x; j < min_x; j++)
   {
-    if (r >= 0 && r <= 255) img->data[(i * img->width + j) * img->channels] = (char)(r * intensity + img->data[(i * img->width + j) * img->channels] * (1.0f - intensity));
-    if (g >= 0 && g <= 255) img->data[(i * img->width + j) * img->channels + 1] = (char)(g * intensity + img->data[(i * img->width + j) * img->channels + 1] * (1.0f - intensity));
-    if (b >= 0 && b <= 255) img->data[(i * img->width + j) * img->channels + 2] = (char)(b * intensity + img->data[(i * img->width + j) * img->channels + 2] * (1.0f - intensity));
+    if (ColorInRange(r)) img->data[(i * img->width + j) * img->channels] = (char)(r * intensity + img->data[(i * img->width + j) * img->channels] * (1.0f - intensity));
+    if (ColorInRange(g)) img->data[(i * img->width + j) * img->channels + 1] = (char)(g * intensity + img->data[(i * img->width + j) * img->channels + 1] * (1.0f - intensity));
+    if (ColorInRange(b)) img->data[(i * img->width + j) * img->channels + 2] = (char)(b * intensity + img->data[(i * img->width + j) * img->channels + 2] * (1.0f - intensity));
   }
 }
 
@@ -178,6 +180,42 @@ bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
   return false;
 }
 
+cJSON* read_json_file(const char* path) {
+  FILE *fp = fopen(path, "rb");
+  if (fp == NULL) {
+      printf("Error: Unable to open the file.\n");
+      return NULL;
+  }
+
+  fseek(fp, 0, SEEK_END);
+  long length = ftell(fp);
+  rewind(fp);
+
+  char *buffer = (char*)malloc(length + 1);
+  if (buffer == NULL) {
+      printf("Error: Memory allocation failed.\n");
+      fclose(fp);
+      return NULL;
+  }
+
+  size_t read_len = fread(buffer, 1, length, fp);
+  buffer[read_len] = '\0';
+  fclose(fp);
+
+  cJSON *json = cJSON_Parse(buffer);
+  free(buffer);
+
+  if (json == NULL) {
+      const char *error_ptr = cJSON_GetErrorPtr();
+      if (error_ptr != NULL) {
+          printf("Error before: %s\n", error_ptr);
+      }
+      return NULL;
+  }
+
+  return json;
+}
+
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
@@ -191,9 +229,9 @@ int main(int argc, char *argv[]) {
   Image_create(&crop1, 35, 35, test.channels, false);
   Image_crop(&crop1, &test, 1658, 138);
   Image_greyscale(&test);
-  Image_write_color(&crop1, 0, 0, 700, 670, -1, 255, -1, 0.7f);
+  Image_write_color(&crop1, 0, 0, 700, 670, 0, 255, 0, 0.7f);
   bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
-  printf("%i",is_black);
+  printf("%i\n",is_black);
 
   // ## Grey scale ##
   // Image grey;
@@ -224,8 +262,18 @@ int main(int argc, char *argv[]) {
   Image_free(&test);
   Image_free(&crop1);
   // Image_free(&grey);
-//   free(visited);
-//   free(contour);
+  //   free(visited);
+  //   free(contour);
+
+  cJSON* json = read_json_file("./src/answer.json");
+
+  char *json_str = cJSON_Print(json);
+
+  printf("%s\n", json_str);
+
+  cJSON_free(json_str);
+  cJSON_Delete(json);
+
 
   return 0;
 }
