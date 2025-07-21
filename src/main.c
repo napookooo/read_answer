@@ -17,54 +17,54 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 enum allocation_type {
-    NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
+  NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
 };
 
 typedef struct {
-    int width;
-    int height;
-    int channels;
-    size_t size;
-    uint8_t *data;
-    enum allocation_type allocation_;
+  int width;
+  int height;
+  int channels;
+  size_t size;
+  uint8_t *data;
+  enum allocation_type allocation_;
 } Image;
 
 void Image_load(Image *img, const char *fname) {
-    if((img->data = stbi_load(fname, &img->width, &img->height, &img->channels, 0)) != NULL) {
-        img->size = img->width * img->height * img->channels;
-        img->allocation_ = STB_ALLOCATED;
-    }
+  if((img->data = stbi_load(fname, &img->width, &img->height, &img->channels, 0)) != NULL) {
+    img->size = img->width * img->height * img->channels;
+    img->allocation_ = STB_ALLOCATED;
+  }
 }
 
 void Image_save(const Image *img, const char *fname) {
-    stbi_write_jpg(fname, img->width, img->height, img->channels, img->data, 100);
+  stbi_write_jpg(fname, img->width, img->height, img->channels, img->data, 100);
 }
 
 void Image_free(Image *img) {
-    if(img->allocation_ != NO_ALLOCATION && img->data != NULL) {
-        if(img->allocation_ == STB_ALLOCATED) {
-            stbi_image_free(img->data);
-        } else {
-            free(img->data);
-        }
-        img->data = NULL;
-        img->width = 0;
-        img->height = 0;
-        img->size = 0;
-        img->allocation_ = NO_ALLOCATION;
+  if(img->allocation_ != NO_ALLOCATION && img->data != NULL) {
+    if(img->allocation_ == STB_ALLOCATED) {
+      stbi_image_free(img->data);
+    } else {
+      free(img->data);
     }
+    img->data = NULL;
+    img->width = 0;
+    img->height = 0;
+    img->size = 0;
+    img->allocation_ = NO_ALLOCATION;
+  }
 }
 
 void Image_create(Image *img, int width, int height, int channels, bool zeroed) {
-    size_t size = width * height * channels;
-    img->data = zeroed ? calloc(size, 1) : malloc(size);
-    if(img->data != NULL) {
-        img->width = width;
-        img->height = height;
-        img->size = size;
-        img->channels = channels;
-        img->allocation_ = SELF_ALLOCATED;
-    }
+  size_t size = width * height * channels;
+  img->data = zeroed ? calloc(size, 1) : malloc(size);
+  if(img->data != NULL) {
+    img->width = width;
+    img->height = height;
+    img->size = size;
+    img->channels = channels;
+    img->allocation_ = SELF_ALLOCATED;
+  }
 }
 
 // fuck me
@@ -132,9 +132,9 @@ typedef struct {
 
 void Image_crop(Image* cropped, Image* image, int x, int y){
   for (int i = 0; i < cropped->height; i++)
-  for (int j = 0; j < cropped->width; j++)
-  for (int c = 0; c < image->channels; c++)
-  cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
+    for (int j = 0; j < cropped->width; j++)
+      for (int c = 0; c < image->channels; c++)
+        cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
 }
 
 void Image_write_color(Image* img, int x, int y, int width, int height, int r, int g, int b, float intensity){
@@ -151,16 +151,15 @@ void Image_write_color(Image* img, int x, int y, int width, int height, int r, i
 
 void Image_greyscale(Image* img){
   for (int i = 0; i < img->height; i++)
-  for (int j = 0; j < img->width; j++)
-  {
-    char r = img->data[(i * img->width + j) * img->channels];
-    char g = img->data[(i * img->width + j) * img->channels + 1];
-    char b = img->data[(i * img->width + j) * img->channels + 2];
-    char gray = (char)(0.299f * r + 0.587f * g + 0.114f * b);
-    img->data[(i * img->width + j) * img->channels] = gray;
-    img->data[(i * img->width + j) * img->channels + 1] = gray;
-    img->data[(i * img->width + j) * img->channels + 2] = gray;
-  }
+    for (int j = 0; j < img->width; j++) {
+      char r = img->data[(i * img->width + j) * img->channels];
+      char g = img->data[(i * img->width + j) * img->channels + 1];
+      char b = img->data[(i * img->width + j) * img->channels + 2];
+      char gray = (char)(0.299f * r + 0.587f * g + 0.114f * b);
+      img->data[(i * img->width + j) * img->channels] = gray;
+      img->data[(i * img->width + j) * img->channels + 1] = gray;
+      img->data[(i * img->width + j) * img->channels + 2] = gray;
+    }
 }
 
 bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value){
@@ -171,10 +170,9 @@ bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
   int min_x = MIN(img->width, x+width);
   int min_y = MIN(img->height, y+height);
   for (int i = y; i < min_y; i++)
-  for (int j = x; j < min_x; j++)
-  {
-    shade += img->data[(i * img->width + j) * img->channels];
-  }
+    for (int j = x; j < min_x; j++) {
+      shade += img->data[(i * img->width + j) * img->channels];
+    }
   calculated_value = shade / area;
   if (calculated_value >= pass_value) return true;
   return false;
@@ -248,13 +246,13 @@ int main(int argc, char *argv[]) {
   //   if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
   // }
 
-//   int mcontour_len = grey.width * grey.height;
-//   int *visited = calloc(mcontour_len, sizeof(int));
-//   Point *contour = malloc(mcontour_len * sizeof(Point));
-//   int contour_len = 0;
+  //   int mcontour_len = grey.width * grey.height;
+  //   int *visited = calloc(mcontour_len, sizeof(int));
+  //   Point *contour = malloc(mcontour_len * sizeof(Point));
+  //   int contour_len = 0;
 
-//   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
-//   printf("contour %d\n", contour_len);
+  //   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
+  //   printf("contour %d\n", contour_len);
 
   Image_save(&test, save_img);
   Image_save(&crop1, save_crop);
