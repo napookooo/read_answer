@@ -28,6 +28,21 @@
                 "HeightNext":249,
                 "Follow":"DownYRightX"
             },
+            "StudentIDCheck":{
+                "X":290,
+                "Y":796,
+                "Column":9
+            },
+            "SubjectIDCheck":{
+                "X":125,
+                "Y":810,
+                "Column":3,
+                "Row":10,
+                "Width":45,
+                "Height":45,
+                "WidthNext":47,
+                "HeightNext":47
+            },
             "SubjectUse":[
                 "10"
             ]

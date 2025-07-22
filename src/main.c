@@ -15,6 +15,7 @@
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define Threshold 180
 
 enum allocation_type {
   NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
@@ -174,7 +175,8 @@ bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
       shade += img->data[(i * img->width + j) * img->channels];
     }
   calculated_value = shade / area;
-  if (calculated_value >= pass_value) return true;
+  printf("%i %i ",calculated_value, pass_value);
+  if (calculated_value <= pass_value) return true;
   return false;
 }
 
@@ -212,6 +214,44 @@ cJSON* read_json_file(const char* path) {
   }
 
   return json;
+}
+
+cJSON* OMR_get_format(cJSON* parent, int format_id){
+  cJSON* formats = cJSON_GetObjectItem(parent,"Formats");
+  cJSON* used_format = cJSON_GetArrayItem(formats, format_id);
+
+  return used_format;
+}
+
+void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext){
+  for (int i = 0; i < row; i++)
+  {
+    for (int j = 0; j < column; j++)
+    {
+      int check_x = x + widthNext * j;
+      int check_y = y + heightNext * i;
+      ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
+      // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, 0, ((i+j)%2 == 0) ? 0 : 255, 1);
+      printf("%i %i %i ",ans[i * column + j], check_x, check_y);
+    }
+    printf("\n");
+  }
+}
+
+char* OMR_get_subjectID(Image* img ,cJSON* format){
+  cJSON* subjectIDjson = cJSON_GetObjectItem(format, "SubjectIDCheck");
+  int checkX = cJSON_GetObjectItem(subjectIDjson, "X")->valueint;
+  int checkY = cJSON_GetObjectItem(subjectIDjson, "Y")->valueint;
+  int checkRow = cJSON_GetObjectItem(subjectIDjson, "Row")->valueint;
+  int checkColumn = cJSON_GetObjectItem(subjectIDjson, "Column")->valueint;
+  char default_OMR[10] = {'0','1','2','3','4','5','6','7','8','9'};
+  int width = cJSON_GetObjectItem(subjectIDjson, "Width")->valueint;
+  int height = cJSON_GetObjectItem(subjectIDjson, "Height")->valueint;
+  int widthNext = cJSON_GetObjectItem(subjectIDjson, "WidthNext")->valueint;
+  int heightNext = cJSON_GetObjectItem(subjectIDjson, "HeightNext")->valueint;
+  bool readSubject[checkColumn * checkColumn];
+  OMR_read(img, readSubject, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext);
+  return "\0";
 }
 
 int main(int argc, char *argv[]) {
@@ -254,23 +294,24 @@ int main(int argc, char *argv[]) {
   //   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
   //   printf("contour %d\n", contour_len);
 
+  // Image_free(&grey);
+  //   free(visited);
+  //   free(contour);
+
+  cJSON* json_data = read_json_file("./src/answer.json");
+  cJSON* used_format = OMR_get_format(json_data, 0);
+
+  // char* json_str = cJSON_Print(used_format);
+  char* subjectID = OMR_get_subjectID(&test, used_format);
+
+  // printf("%s\n", json_str);
   Image_save(&test, save_img);
   Image_save(&crop1, save_crop);
 
   Image_free(&test);
   Image_free(&crop1);
-  // Image_free(&grey);
-  //   free(visited);
-  //   free(contour);
-
-  cJSON* json = read_json_file("./src/answer.json");
-
-  char *json_str = cJSON_Print(json);
-
-  printf("%s\n", json_str);
-
-  cJSON_free(json_str);
-  cJSON_Delete(json);
+  // cJSON_free(json_str);
+  cJSON_Delete(json_data);
 
 
   return 0;
