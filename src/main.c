@@ -1,318 +1,305 @@
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-#include "cJSON.h"
-
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <math.h>
+#include <gtk/gtk.h>
 #include <stdio.h>
-
-#define TrueColor(x) ((x) < 127) ? 255 : 0
-#define ColorInRange(x) (x >= 0 && x <= 255)
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define Threshold 180
-
-enum allocation_type {
-  NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
-};
+#include <string.h>
 
 typedef struct {
-  int width;
-  int height;
-  int channels;
-  size_t size;
-  uint8_t *data;
-  enum allocation_type allocation_;
-} Image;
+  GtkApplication *app;
+  GtkEntry *entry;
+} AppEntry;
 
-void Image_load(Image *img, const char *fname) {
-  if((img->data = stbi_load(fname, &img->width, &img->height, &img->channels, 0)) != NULL) {
-    img->size = img->width * img->height * img->channels;
-    img->allocation_ = STB_ALLOCATED;
+typedef struct {
+  GtkWidget *image;
+  GtkWidget *file_list;
+  const char *folder_path;
+} AppWidgets;
+
+static void populate_file_list(AppWidgets *widgets);
+
+void folder_select_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+  GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
+  AppWidgets *widgets = (AppWidgets *)user_data;
+
+  GFile *folder = gtk_file_dialog_select_folder_finish(dialog, res, NULL);
+  if (!folder) {
+    g_print("No folder selected or dialog was cancelled.\n");
+    return;
+  }
+
+  gchar *folder_path = g_file_get_path(folder);
+  g_print("Selected folder: %s\n", folder_path);
+
+  // Update folder path and populate list
+  widgets->folder_path = g_strdup(folder_path);
+  populate_file_list(widgets);
+
+  g_free(folder_path);
+  g_object_unref(folder);
+}
+
+void folder_select(GtkButton *button, gpointer user_data) {
+  GtkFileDialog *dialog = gtk_file_dialog_new();
+  GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+  gtk_file_dialog_select_folder(dialog, parent, NULL, folder_select_smth, user_data);
+}
+
+static void on_file_button_clicked(GtkButton *buttont, gpointer user_data) {
+  AppWidgets *widgets = (AppWidgets *)user_data;
+  const gchar *filename = gtk_button_get_label(buttont);
+
+  gchar *filepath = g_build_filename(widgets->folder_path, filename, NULL);
+  GFile *file = g_file_new_for_path(filepath);
+  gtk_picture_set_file(GTK_PICTURE(widgets->image), file);
+  g_object_unref(file);
+  g_free(filepath);
+}
+
+static void clear_box_children(GtkWidget *box) {
+  GtkWidget *child = gtk_widget_get_first_child(box);
+  while (child != NULL) {
+    GtkWidget *next = gtk_widget_get_next_sibling(child);
+    gtk_widget_unparent(child);
+    child = next;
   }
 }
 
-void Image_save(const Image *img, const char *fname) {
-  stbi_write_jpg(fname, img->width, img->height, img->channels, img->data, 100);
-}
+static void populate_file_list(AppWidgets *widgets) {
+  clear_box_children(widgets->file_list);
 
-void Image_free(Image *img) {
-  if(img->allocation_ != NO_ALLOCATION && img->data != NULL) {
-    if(img->allocation_ == STB_ALLOCATED) {
-      stbi_image_free(img->data);
-    } else {
-      free(img->data);
+  GFile *folder = g_file_new_for_path(widgets->folder_path);
+  GFileEnumerator *enumerator = g_file_enumerate_children(
+    folder,
+    "standard::name,standard::type",
+    G_FILE_QUERY_INFO_NONE,
+    NULL,
+    NULL
+  );
+
+  if (enumerator) {
+    GFileInfo *info;
+    while ((info = g_file_enumerator_next_file(enumerator, NULL, NULL)) != NULL) {
+      if (g_file_info_get_file_type(info) == G_FILE_TYPE_REGULAR) {
+        const char *filename = g_file_info_get_name(info);
+        GtkWidget *btn = gtk_button_new_with_label(filename);
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_file_button_clicked), widgets);
+        gtk_box_append(GTK_BOX(widgets->file_list), btn);
+      }
+      g_object_unref(info);
     }
-    img->data = NULL;
-    img->width = 0;
-    img->height = 0;
-    img->size = 0;
-    img->allocation_ = NO_ALLOCATION;
+    g_file_enumerator_close(enumerator, NULL, NULL);
+    g_object_unref(enumerator);
+  }
+
+  g_object_unref(folder);
+}
+
+static void on_reload_clicked(GtkButton *buttont, gpointer user_data) {
+  AppWidgets *widgets = (AppWidgets *)user_data;
+  populate_file_list(widgets);
+}
+
+static void app_window(GtkButton *buttont, gpointer user_data) {
+  GtkApplication *app = GTK_APPLICATION(user_data);
+  GtkWidget *window;
+  window = gtk_application_window_new (app);
+  gtk_window_set_title(GTK_WINDOW(window), "Image Viewer");
+  gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
+
+  GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_window_set_child(GTK_WINDOW(window), main_box);
+
+  // --- LEFT PANE ---
+  GtkWidget *left_pane = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  gtk_widget_set_size_request(left_pane, 220, -1);
+  gtk_widget_set_margin_top(left_pane, 10);
+  gtk_widget_set_margin_start(left_pane, 10);
+
+  GtkWidget *reload_btn = gtk_button_new_with_label("Reload");
+  gtk_box_append(GTK_BOX(left_pane), reload_btn);
+
+  GtkWidget *folder_btn = gtk_button_new_with_label("Folders");
+  gtk_box_append(GTK_BOX(left_pane), folder_btn);
+  gtk_widget_set_margin_bottom(folder_btn, 10);
+
+  GtkWidget *scroll = gtk_scrolled_window_new();
+  gtk_widget_set_vexpand(scroll, TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+
+  GtkWidget *file_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), file_list);
+  gtk_box_append(GTK_BOX(left_pane), scroll);
+
+  gtk_box_append(GTK_BOX(main_box), left_pane);
+
+  // --- RIGHT PANE ---
+  GtkWidget *image_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gtk_widget_set_hexpand(image_box, TRUE);
+  gtk_widget_set_vexpand(image_box, TRUE);
+
+  GtkWidget *image = gtk_picture_new();
+  gtk_picture_set_content_fit(GTK_PICTURE(image), GTK_CONTENT_FIT_CONTAIN);
+  gtk_widget_set_hexpand(image, TRUE);
+  gtk_widget_set_vexpand(image, TRUE);
+  gtk_box_append(GTK_BOX(image_box), image);
+
+  GtkWidget *write = gtk_button_new_with_label("Write(Named as $(oldname)_checked)");
+  gtk_widget_set_margin_top(write, 10);
+  gtk_box_append(GTK_BOX(image_box), write);
+  GtkWidget *over_write = gtk_button_new_with_label("Overwrite");
+  gtk_widget_set_margin_top(over_write, 10);
+  gtk_box_append(GTK_BOX(image_box), over_write);
+  GtkWidget *quit = gtk_button_new_with_label("Quit");
+  gtk_widget_set_margin_top(quit, 10);
+  gtk_box_append(GTK_BOX(image_box), quit);
+  gtk_widget_set_margin_bottom(quit, 10);
+
+  gtk_box_append(GTK_BOX(main_box), image_box);
+
+  AppWidgets *widgets = g_malloc(sizeof(AppWidgets));
+  const char *folder_path = "";
+  widgets->image = image;
+  widgets->file_list = file_list;
+  widgets->folder_path = folder_path;
+
+  populate_file_list(widgets);
+
+  g_signal_connect(reload_btn, "clicked", G_CALLBACK(on_reload_clicked), widgets);
+  g_signal_connect(folder_btn, "clicked", G_CALLBACK(folder_select), widgets);
+  // g_signal_connect(write, "clicked", G_CALLBACK(smth), window);
+  // g_signal_connect(over_write, "clicked", G_CALLBACK(smth, window);
+  g_signal_connect_swapped(quit, "clicked", G_CALLBACK(gtk_window_destroy), GTK_WINDOW(window));
+
+  gtk_widget_show(window);
+  GtkWidget *prev_window = gtk_widget_get_ancestor(GTK_WIDGET(buttont), GTK_TYPE_WINDOW);
+  if (prev_window) {
+    gtk_window_destroy(GTK_WINDOW(prev_window));
   }
 }
 
-void Image_create(Image *img, int width, int height, int channels, bool zeroed) {
-  size_t size = width * height * channels;
-  img->data = zeroed ? calloc(size, 1) : malloc(size);
-  if(img->data != NULL) {
-    img->width = width;
-    img->height = height;
-    img->size = size;
-    img->channels = channels;
-    img->allocation_ = SELF_ALLOCATED;
-  }
-}
-
-// fuck me
-int inside(const int x, const int y, const int w, const int h){
-  return x>=0 && y>=0 && x<w && y<h;
-}
-
-typedef struct {
-  int x, y;
-} Point;
-
-// void Contour(Image *out, Image *img, int *visited, Point *contour, int *contour_len, int mcontour_len) {
-//   int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
-//   int ccount = 0;
-
-//   for (int y = 0; y < img->height; y++) {
-//     for (int x = 0; x < img->width; x++) {
-//       int idx = y * img->width + x;
-//       if (img->data[idx * img->channels] == 255 && !visited[idx]) {
-//         int func_x = x, func_y = y;
-//         // int dir_ind = 0;
-//         int start_x = x, start_y = y;
-//         int mstep = img->width * img->height;
-//         int yesc = 0;
-
-//         do {
-//           if (!inside(func_x, func_y, img->width, img->height)) break;
-//           if (*contour_len >= mcontour_len) break;
-
-//           contour[*contour_len].x = func_x;
-//           contour[*contour_len].y = func_y;
-//           (*contour_len)++;
-//           visited[func_y * img->width + func_x] = 1;
-
-//           int found = 0;
-//           for (int i = 0; i < 8; i++) {
-//             int nx = func_x + direction[i][0];
-//             int ny = func_y + direction[i][1];
-//             int nidx = ny * img->width + nx;
-
-//             if (inside(nx, ny, img->width, img->height) && img->data[nidx * img->channels] == 255 && !visited[nidx]) {
-//               out->data[nidx*out->channels + 0] = ccount%2 ? 255 : 0;
-//               out->data[nidx*out->channels + 1] = 0;
-//               out->data[nidx*out->channels + 2] = ccount%2 ? 0 : 255;
-//               func_x = nx;
-//               func_y = ny;
-//               // dir_ind = (nd + 6) % 8;
-//               found = 1;
-//               yesc = 1;
-//               break;
-//             }
-//           }
-
-//           if (!found || --mstep <= 0) break;
-//         } while (!(func_x == start_x && func_y == start_y));
-//         if(yesc){
-//           // printf("found contpur\n");
-//           ccount++;
-//         }
-//       }
-//     }
+// static void app_window(GtkButton *buttont, gpointer user_data) {
+//   GtkApplication *app = GTK_APPLICATION(user_data);
+//   GtkWidget *window;
+//   GtkWidget *grid;
+//   GtkFileDialog *dialog;
+//   GtkWidget *button;
+//
+//   window = gtk_application_window_new (app);
+//   gtk_window_set_title (GTK_WINDOW (window), "Lovely Application");
+//   grid = gtk_grid_new ();
+//   gtk_window_set_child (GTK_WINDOW (window), grid);
+//   gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+//
+//   dialog = gtk_file_dialog_new();
+//
+//   button = gtk_button_new_with_label ("Choose folder");
+//   g_signal_connect(button, "clicked", G_CALLBACK (folder_select), dialog);
+//   gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 1, 1);
+//   gtk_widget_set_size_request(button, 200, 100);
+//   gtk_widget_set_hexpand(button, TRUE);
+//
+//   button = gtk_button_new_with_label ("Quit");
+//   g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy), window);
+//   gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 2, 1);
+//   gtk_widget_set_size_request(button, 200, 100);
+//   gtk_widget_set_hexpand(button, TRUE);
+//
+//   gtk_window_present (GTK_WINDOW (window));
+//   GtkWidget *prev_window = gtk_widget_get_ancestor(GTK_WIDGET(buttont), GTK_TYPE_WINDOW);
+//   if (prev_window) {
+//     gtk_window_destroy(GTK_WINDOW(prev_window));
 //   }
-//   printf("count %d\n", ccount);
 // }
 
-void Image_crop(Image* cropped, Image* image, int x, int y){
-  for (int i = 0; i < cropped->height; i++)
-    for (int j = 0; j < cropped->width; j++)
-      for (int c = 0; c < image->channels; c++)
-        cropped->data[(i * cropped->width + j) * cropped->channels + c] = image->data[((y + i) * image->width + x + j) * image->channels + c];
-}
-
-void Image_write_color(Image* img, int x, int y, int width, int height, int r, int g, int b, float intensity){
-  int min_x = MIN(img->width, x+width);
-  int min_y = MIN(img->height, y+height);
-  for (int i = y; i < min_y; i++)
-  for (int j = x; j < min_x; j++)
-  {
-    if (ColorInRange(r)) img->data[(i * img->width + j) * img->channels] = (char)(r * intensity + img->data[(i * img->width + j) * img->channels] * (1.0f - intensity));
-    if (ColorInRange(g)) img->data[(i * img->width + j) * img->channels + 1] = (char)(g * intensity + img->data[(i * img->width + j) * img->channels + 1] * (1.0f - intensity));
-    if (ColorInRange(b)) img->data[(i * img->width + j) * img->channels + 2] = (char)(b * intensity + img->data[(i * img->width + j) * img->channels + 2] * (1.0f - intensity));
+static void check_entry(GtkButton *buttont, gpointer user_data) {
+  AppEntry *data = (AppEntry *)user_data;
+  GtkApplication *app = data->app;
+  GtkEntry *entry = data->entry;
+  char *text = gtk_editable_get_chars(GTK_EDITABLE(entry), 0, -1);
+  if (!strcmp("right", text)){
+    g_signal_connect(buttont, "clicked", G_CALLBACK(app_window), app);
   }
 }
 
-void Image_greyscale(Image* img){
-  for (int i = 0; i < img->height; i++)
-    for (int j = 0; j < img->width; j++) {
-      char r = img->data[(i * img->width + j) * img->channels];
-      char g = img->data[(i * img->width + j) * img->channels + 1];
-      char b = img->data[(i * img->width + j) * img->channels + 2];
-      char gray = (char)(0.299f * r + 0.587f * g + 0.114f * b);
-      img->data[(i * img->width + j) * img->channels] = gray;
-      img->data[(i * img->width + j) * img->channels + 1] = gray;
-      img->data[(i * img->width + j) * img->channels + 2] = gray;
-    }
-}
+static void login(GtkButton *buttont, gpointer user_data) {
+  GtkApplication *app = GTK_APPLICATION(user_data);
+  GtkWidget *window;
+  GtkWidget *grid;
+  GtkWidget *entry;
+  GtkWidget *button;
 
-bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value){
-  int area = width * height;
-  int shade = 0;
-  unsigned char calculated_value = 0;
+  window = gtk_application_window_new (app);
+  gtk_window_set_title (GTK_WINDOW (window), "Login");
+  grid = gtk_grid_new ();
+  gtk_window_set_child (GTK_WINDOW (window), grid);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
 
-  int min_x = MIN(img->width, x+width);
-  int min_y = MIN(img->height, y+height);
-  for (int i = y; i < min_y; i++)
-    for (int j = x; j < min_x; j++) {
-      shade += img->data[(i * img->width + j) * img->channels];
-    }
-  calculated_value = shade / area;
-  printf("%i %i ",calculated_value, pass_value);
-  if (calculated_value <= pass_value) return true;
-  return false;
-}
+  entry = gtk_entry_new();
+  gtk_grid_attach (GTK_GRID (grid), entry, 0, 0, 1, 1);
+  gtk_widget_set_size_request(entry, 200, 100);
+  gtk_widget_set_hexpand(entry, TRUE);
 
-cJSON* read_json_file(const char* path) {
-  FILE *fp = fopen(path, "rb");
-  if (fp == NULL) {
-      printf("Error: Unable to open the file.\n");
-      return NULL;
-  }
+  button = gtk_button_new_with_label ("Check");
+  AppEntry *data = g_malloc(sizeof(AppEntry));
+  data->app = app;
+  data->entry = GTK_ENTRY(entry);
+  g_signal_connect(button, "clicked", G_CALLBACK(check_entry), data);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 1, 1);
+  gtk_widget_set_size_request(button, 200, 100);
+  gtk_widget_set_hexpand(button, TRUE);
 
-  fseek(fp, 0, SEEK_END);
-  long length = ftell(fp);
-  rewind(fp);
+  button = gtk_button_new_with_label ("Quit");
+  g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy), window);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, 2, 1, 1);
+  gtk_widget_set_size_request(button, 200, 100);
+  gtk_widget_set_hexpand(button, TRUE);
 
-  char *buffer = (char*)malloc(length + 1);
-  if (buffer == NULL) {
-      printf("Error: Memory allocation failed.\n");
-      fclose(fp);
-      return NULL;
-  }
+  gtk_window_present (GTK_WINDOW (window));
 
-  size_t read_len = fread(buffer, 1, length, fp);
-  buffer[read_len] = '\0';
-  fclose(fp);
-
-  cJSON *json = cJSON_Parse(buffer);
-  free(buffer);
-
-  if (json == NULL) {
-      const char *error_ptr = cJSON_GetErrorPtr();
-      if (error_ptr != NULL) {
-          printf("Error before: %s\n", error_ptr);
-      }
-      return NULL;
-  }
-
-  return json;
-}
-
-cJSON* OMR_get_format(cJSON* parent, int format_id){
-  cJSON* formats = cJSON_GetObjectItem(parent,"Formats");
-  cJSON* used_format = cJSON_GetArrayItem(formats, format_id);
-
-  return used_format;
-}
-
-void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext){
-  for (int i = 0; i < row; i++)
-  {
-    for (int j = 0; j < column; j++)
-    {
-      int check_x = x + widthNext * j;
-      int check_y = y + heightNext * i;
-      ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
-      // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, 0, ((i+j)%2 == 0) ? 0 : 255, 1);
-      printf("%i %i %i ",ans[i * column + j], check_x, check_y);
-    }
-    printf("\n");
+  GtkWidget *prev_window = gtk_widget_get_ancestor(GTK_WIDGET(buttont), GTK_TYPE_WINDOW);
+  if (prev_window) {
+    gtk_window_destroy(GTK_WINDOW(prev_window));
   }
 }
 
-char* OMR_get_subjectID(Image* img ,cJSON* format){
-  cJSON* subjectIDjson = cJSON_GetObjectItem(format, "SubjectIDCheck");
-  int checkX = cJSON_GetObjectItem(subjectIDjson, "X")->valueint;
-  int checkY = cJSON_GetObjectItem(subjectIDjson, "Y")->valueint;
-  int checkRow = cJSON_GetObjectItem(subjectIDjson, "Row")->valueint;
-  int checkColumn = cJSON_GetObjectItem(subjectIDjson, "Column")->valueint;
-  char default_OMR[10] = {'0','1','2','3','4','5','6','7','8','9'};
-  int width = cJSON_GetObjectItem(subjectIDjson, "Width")->valueint;
-  int height = cJSON_GetObjectItem(subjectIDjson, "Height")->valueint;
-  int widthNext = cJSON_GetObjectItem(subjectIDjson, "WidthNext")->valueint;
-  int heightNext = cJSON_GetObjectItem(subjectIDjson, "HeightNext")->valueint;
-  bool readSubject[checkColumn * checkColumn];
-  OMR_read(img, readSubject, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext);
-  return "\0";
+static void activate(GtkApplication *app, gpointer user_data) {
+  GtkWidget *window;
+  GtkWidget *grid;
+  GtkWidget *button;
+
+  window = gtk_application_window_new (app);
+  gtk_window_set_title (GTK_WINDOW (window), "Welcome");
+  grid = gtk_grid_new ();
+  gtk_window_set_child (GTK_WINDOW (window), grid);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
+
+  button = gtk_button_new_with_label ("Enter the app");
+  g_signal_connect(button, "clicked", G_CALLBACK(login), app);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 1, 1);
+  gtk_widget_set_size_request(button, 200, 100);
+  gtk_widget_set_hexpand(button, TRUE);
+
+  button = gtk_button_new_with_label ("Quit");
+  g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy), window);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 2, 1);
+  gtk_widget_set_size_request(button, 200, 100);
+  gtk_widget_set_hexpand(button, TRUE);
+
+  gtk_window_present (GTK_WINDOW (window));
 }
 
-int main(int argc, char *argv[]) {
-  Image test;
-  char *file_loc = "./../pict/20250529110230_001.jpg";
-  char *save_img = "./pict/test.png";
-  char *save_crop = "./pict/crop1.png";
+int main(int argc, char **argv) {
 
-  Image_load(&test, file_loc);
+  (void) argc;
+  (void) argv;
 
-  // ## Crop 1 ##
-  Image crop1;
-  Image_create(&crop1, 35, 35, test.channels, false);
-  Image_crop(&crop1, &test, 1658, 138);
-  Image_greyscale(&test);
-  Image_write_color(&crop1, 0, 0, 700, 670, 0, 255, 0, 0.7f);
-  bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
-  printf("%i\n",is_black);
+  GtkApplication *app;
+  int status;
 
-  // ## Grey scale ##
-  // Image grey;
-  // int channels = crop1.channels == 4 ? 2 : 1;
-  // Image_create(&grey, crop1.width, crop1.height, channels, false);
-  // for (unsigned char *p = crop1.data, *pg = grey.data;
-  //      p < crop1.data + crop1.size;
-  //      p += crop1.channels, pg += channels) {
-  //   *pg = (uint8_t)((p[0] + p[1] + p[2]) / 3);
-  //   if (channels == 2) pg[1] = p[3];
-  // }
-  // for (int i = 0; i < grey.width * grey.height; ++i) {
-  //   grey.data[i * channels] = TrueColor(grey.data[i * channels]);
-  //   if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
-  // }
+  app = gtk_application_new("org.gtk.ReadImageUI", G_APPLICATION_DEFAULT_FLAGS);
+  g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
+  status = g_application_run(G_APPLICATION(app), argc, argv);
+  g_object_unref(app);
 
-  //   int mcontour_len = grey.width * grey.height;
-  //   int *visited = calloc(mcontour_len, sizeof(int));
-  //   Point *contour = malloc(mcontour_len * sizeof(Point));
-  //   int contour_len = 0;
-
-  //   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
-  //   printf("contour %d\n", contour_len);
-
-  // Image_free(&grey);
-  //   free(visited);
-  //   free(contour);
-
-  cJSON* json_data = read_json_file("./src/answer.json");
-  cJSON* used_format = OMR_get_format(json_data, 0);
-
-  // char* json_str = cJSON_Print(used_format);
-  char* subjectID = OMR_get_subjectID(&test, used_format);
-
-  // printf("%s\n", json_str);
-  Image_save(&test, save_img);
-  Image_save(&crop1, save_crop);
-
-  Image_free(&test);
-  Image_free(&crop1);
-  // cJSON_free(json_str);
-  cJSON_Delete(json_data);
-
-
-  return 0;
+  return status;
 }
