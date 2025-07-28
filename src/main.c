@@ -10,12 +10,15 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #define TrueColor(x) ((x) < 127) ? 255 : 0
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define Threshold 180
+#define Threshold 172
+
+char default_chars[10] = {'0','1','2','3','4','5','6','7','8','9'};
 
 enum allocation_type {
   NO_ALLOCATION, SELF_ALLOCATED, STB_ALLOCATED
@@ -175,7 +178,7 @@ bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
       shade += img->data[(i * img->width + j) * img->channels];
     }
   calculated_value = shade / area;
-  printf("%i %i ",calculated_value, pass_value);
+  // printf("%i %i ",calculated_value, pass_value);
   if (calculated_value <= pass_value) return true;
   return false;
 }
@@ -223,53 +226,236 @@ cJSON* OMR_get_format(cJSON* parent, int format_id){
   return used_format;
 }
 
-void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext){
-  for (int i = 0; i < row; i++)
-  {
-    for (int j = 0; j < column; j++)
-    {
-      int check_x = x + widthNext * j;
-      int check_y = y + heightNext * i;
-      ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
-      // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, 0, ((i+j)%2 == 0) ? 0 : 255, 1);
-      printf("%i %i %i ",ans[i * column + j], check_x, check_y);
+cJSON* OMR_get_subject(cJSON* parent, const char* subjectID){
+  cJSON* subjects = cJSON_GetObjectItem(parent,"Subjects");
+  cJSON* used_subject = cJSON_GetObjectItem(subjects, subjectID);
+
+  return used_subject;
+}
+
+int index_of_char(const char *arr, char target) {
+    int i = 0;
+    while (arr[i] != '\0') {
+        if (arr[i] == target) return i;
+        i++;
     }
-    printf("\n");
+    return -1;
+}
+
+void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext, bool primary){
+  if(!primary){
+    for (int j = 0; j < row; j++)
+    {
+      for (int i = 0; i < column; i++)
+      {
+        int check_x = x + widthNext * i;
+        int check_y = y + heightNext * j;
+        ans[i * row + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
+        // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * row + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
+      }
+    }
+  } else {
+    for (int i = 0; i < row; i++)
+    {
+      for (int j = 0; j < column; j++)
+      {
+        int check_x = x + widthNext * j;
+        int check_y = y + heightNext * i;
+        ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
+        // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * column + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
+      }
+    }
   }
 }
 
-char* OMR_get_subjectID(Image* img ,cJSON* format){
+char* OMR_get_chars(bool answers[], char chars[], int column, int row, bool primary){
+  char* result;
+  if (!primary){
+    result = (char*)malloc((column+1) * sizeof(char));
+
+    for (int i = 0; i < column; i++){
+      result[i] = ' ';
+      for (int j = 0; j < row; j++){
+        if (answers[i * row + j]){
+          if (result[i] != ' '){
+            result[i] = ' ';
+            break;
+          }
+          result[i] = chars[j];
+        }
+      }
+    }
+    
+    result[column] = '\0';
+  } else {
+    result = (char*)malloc((row+1) * sizeof(char));
+
+    for (int i = 0; i < row; i++){
+      result[i] = ' ';
+      for (int j = 0; j < column; j++){
+        if (answers[i * column + j]){
+          if (result[i] != ' '){
+            result[i] = ' ';
+            break;
+          }
+          result[i] = chars[j];
+        }
+      }
+    }
+
+    result[row] = '\0';
+  }
+
+  return result;
+}
+
+void OMR_get_choices(cJSON* subject, char* choice_arr, int array_length){
+  cJSON* choices = cJSON_GetObjectItem(subject, "Choices");
+  for (int i = 0; i < array_length; i++){
+    cJSON* choice = cJSON_GetArrayItem(choices, i);
+    choice_arr[i] = (char)(choice->valuestring[0]);
+  }
+}
+
+char* OMR_get_subjectID(Image* img, cJSON* format){
   cJSON* subjectIDjson = cJSON_GetObjectItem(format, "SubjectIDCheck");
   int checkX = cJSON_GetObjectItem(subjectIDjson, "X")->valueint;
   int checkY = cJSON_GetObjectItem(subjectIDjson, "Y")->valueint;
   int checkRow = cJSON_GetObjectItem(subjectIDjson, "Row")->valueint;
   int checkColumn = cJSON_GetObjectItem(subjectIDjson, "Column")->valueint;
-  char default_OMR[10] = {'0','1','2','3','4','5','6','7','8','9'};
   int width = cJSON_GetObjectItem(subjectIDjson, "Width")->valueint;
   int height = cJSON_GetObjectItem(subjectIDjson, "Height")->valueint;
   int widthNext = cJSON_GetObjectItem(subjectIDjson, "WidthNext")->valueint;
   int heightNext = cJSON_GetObjectItem(subjectIDjson, "HeightNext")->valueint;
-  bool readSubject[checkColumn * checkColumn];
-  OMR_read(img, readSubject, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext);
-  return "\0";
+  bool primary = cJSON_GetObjectItem(subjectIDjson,"Primary")->valueint;
+  bool readID[checkColumn * checkRow];
+  OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
+  return OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+}
+
+char* OMR_get_studentID(Image* img, cJSON* format){
+  cJSON* studentIDjson = cJSON_GetObjectItem(format, "StudentIDCheck");
+  int checkX = cJSON_GetObjectItem(studentIDjson, "X")->valueint;
+  int checkY = cJSON_GetObjectItem(studentIDjson, "Y")->valueint;
+  int checkRow = cJSON_GetObjectItem(studentIDjson, "Row")->valueint;
+  int checkColumn = cJSON_GetObjectItem(studentIDjson, "Column")->valueint;
+  int width = cJSON_GetObjectItem(studentIDjson, "Width")->valueint;
+  int height = cJSON_GetObjectItem(studentIDjson, "Height")->valueint;
+  int widthNext = cJSON_GetObjectItem(studentIDjson, "WidthNext")->valueint;
+  int heightNext = cJSON_GetObjectItem(studentIDjson, "HeightNext")->valueint;
+  bool primary = cJSON_GetObjectItem(studentIDjson,"Primary")->valueint;
+  bool readID[checkColumn * checkRow];
+  OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
+  return OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+}
+
+int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
+  cJSON* sheet = cJSON_GetObjectItem(format,"Sheet");
+
+  int sheetX = cJSON_GetObjectItem(sheet,"X")->valueint;
+  int sheetY = cJSON_GetObjectItem(sheet,"Y")->valueint;
+  int sheetColumn = cJSON_GetObjectItem(sheet,"Column")->valueint;
+  int sheetRow = cJSON_GetObjectItem(sheet,"Row")->valueint;
+  int sheetWidthNext = cJSON_GetObjectItem(sheet,"WidthNext")->valueint;
+  int sheetHeightNext = cJSON_GetObjectItem(sheet,"HeightNext")->valueint;
+  bool sheetPrimary = cJSON_GetObjectItem(sheet,"Primary")->valueint;
+
+  cJSON* question = cJSON_GetObjectItem(format,"Question");
+
+  int questionWidth = cJSON_GetObjectItem(question,"Width")->valueint;
+  int questionHeight = cJSON_GetObjectItem(question,"Height")->valueint;
+  int questionColumn = cJSON_GetObjectItem(question,"Column")->valueint;
+  int questionRow = cJSON_GetObjectItem(question,"Row")->valueint;
+  int questionWidthNext = cJSON_GetObjectItem(question,"WidthNext")->valueint;
+  int questionHeightNext = cJSON_GetObjectItem(question,"HeightNext")->valueint;
+  bool questionPrimary = cJSON_GetObjectItem(question,"Primary")->valueint;
+
+  int score[sheetColumn * sheetRow];
+  cJSON* biases = cJSON_GetObjectItem(subject, "BiasScore");
+  int bias;
+
+  char choices[questionPrimary ? questionColumn : questionRow];
+  OMR_get_choices(subject, choices, questionPrimary ? questionColumn : questionRow);
+
+  cJSON* answers = cJSON_GetObjectItem(subject, "AnswerList");
+  int answerCount = cJSON_GetArraySize(answers);
+  char* answer;
+
+  int max_score = cJSON_GetObjectItem(subject, "MaxScore")->valueint;
+  int current_score = 0;
+
+
+  for (int i = 0; i < sheetColumn; i++)
+  for (int j = 0; j < sheetRow; j++)
+  {
+    if (i*sheetRow+j >= answerCount) break;
+    int checkX = sheetX + sheetWidthNext * i;
+    int checkY = sheetY + sheetHeightNext * j;
+    bool readAnswer[questionColumn * questionRow];
+    OMR_read(img, readAnswer, checkX, checkY, questionColumn, questionRow, questionWidth, questionHeight, questionWidthNext, questionHeightNext, questionPrimary);
+    char* charsGet = OMR_get_chars(readAnswer, choices, questionColumn, questionRow, questionPrimary);
+    answer = cJSON_GetArrayItem(answers, i*sheetRow+j)->valuestring;
+    if (!strcmp(charsGet, answer)){
+      Image_write_color(img, checkX, checkY, questionWidthNext*questionColumn, questionHeightNext*questionRow, 0, 255, 0, 0.7f);
+      bias = cJSON_GetArrayItem(biases, i*sheetRow+j)->valueint;
+      current_score += bias;
+    } else {
+      int slen = strlen(charsGet);
+      for (int k = 0; k < slen; k++){
+        if (charsGet[k] != answer[k]){
+          int index = index_of_char(choices, answer[k]);
+          if (index != 0){
+            Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
+            questionWidthNext*(questionPrimary ? index : 1), questionHeightNext*(questionPrimary ? 1 : index), 255, 0, 0, 0.7f);
+          }
+          Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index : k), checkY+questionHeightNext*(questionPrimary ? k : index),
+          questionWidthNext, questionHeightNext, 0, 255, 0, 0.7f);
+          if (index != (questionPrimary ? questionColumn : questionRow)){
+            Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index+1 : k), checkY+questionHeightNext*(questionPrimary ? k : index+1),
+            questionWidthNext*(questionPrimary ? questionColumn-index-1 : 1), questionHeightNext*(questionPrimary ? 1 : questionRow-index-1), 255, 0, 0, 0.7f);
+          }
+        } else {
+          Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
+          questionWidthNext*(questionPrimary ? questionColumn : 1), questionHeightNext*(questionPrimary ? 1 : questionRow), 255, 127, 0, 0.7f);
+        }
+        // Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
+        // questionWidthNext*(questionPrimary ? questionColumn : 1), questionHeightNext*(questionPrimary ? 1 : questionRow), 255, (charsGet[k] == answer[k]) ? 127 : 0 , 0, 0.7f);
+      }
+    }
+    // printf("%d. %s\n",i*sheetRow+j+1,charsGet);
+  }
+
+  if (current_score > max_score){
+    current_score = max_score;
+  }
+
+  return current_score;
+}
+
+void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID, char** studentID, int* score){
+  cJSON* used_format = OMR_get_format(json_data, formatID);
+  *subjectID = OMR_get_subjectID(img, used_format);
+  cJSON* used_subject = OMR_get_subject(json_data, *subjectID);
+  *studentID = OMR_get_studentID(img, used_format);
+  *score = OMR_get_score(img, used_format, used_subject);
 }
 
 int main(int argc, char *argv[]) {
   Image test;
   char *file_loc = "./../pict/20250529110230_001.jpg";
   char *save_img = "./pict/test.png";
-  char *save_crop = "./pict/crop1.png";
+  // char *save_crop = "./pict/crop1.png";
 
   Image_load(&test, file_loc);
 
   // ## Crop 1 ##
-  Image crop1;
-  Image_create(&crop1, 35, 35, test.channels, false);
-  Image_crop(&crop1, &test, 1658, 138);
+  // Image crop1;
+  // Image_create(&crop1, 35, 35, test.channels, false);
+  // Image_crop(&crop1, &test, 1658, 138);
   Image_greyscale(&test);
-  Image_write_color(&crop1, 0, 0, 700, 670, 0, 255, 0, 0.7f);
-  bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
-  printf("%i\n",is_black);
+  // Image_write_color(&crop1, 0, 0, 700, 670, 0, 255, 0, 0.7f);
+  // bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
+  // printf("%i\n",is_black);
 
   // ## Grey scale ##
   // Image grey;
@@ -299,17 +485,23 @@ int main(int argc, char *argv[]) {
   //   free(contour);
 
   cJSON* json_data = read_json_file("./src/answer.json");
-  cJSON* used_format = OMR_get_format(json_data, 0);
+  int formatID = 0;
+  char* subjectID;
+  char* studentID;
+  int score;
+  OMR_get_values(&test, json_data, formatID, &subjectID, &studentID, &score);
+  printf("Subject : %s\n",subjectID);
+  printf("Student : %s\n", studentID);
+  printf("Score : %d\n",score);
 
-  // char* json_str = cJSON_Print(used_format);
-  char* subjectID = OMR_get_subjectID(&test, used_format);
 
   // printf("%s\n", json_str);
   Image_save(&test, save_img);
-  Image_save(&crop1, save_crop);
+  // Image_save(&crop1, save_crop);
 
   Image_free(&test);
-  Image_free(&crop1);
+  // Image_free(&crop1);
+  // char* json_str = cJSON_Print(used_format);
   // cJSON_free(json_str);
   cJSON_Delete(json_data);
 
