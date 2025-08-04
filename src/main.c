@@ -4,6 +4,8 @@
 #include "stb_image_write.h"
 #include "cJSON.h"
 
+#include <dirent.h>
+#include <sys/types.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -422,6 +424,7 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
         // questionWidthNext*(questionPrimary ? questionColumn : 1), questionHeightNext*(questionPrimary ? 1 : questionRow), 255, (charsGet[k] == answer[k]) ? 127 : 0 , 0, 0.7f);
       }
     }
+    free(charsGet);
     // printf("%d. %s\n",i*sheetRow+j+1,charsGet);
   }
 
@@ -440,71 +443,142 @@ void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID
   *score = OMR_get_score(img, used_format, used_subject);
 }
 
+#define MAX_FILES 100
+
+bool is_path(const char *str) {
+    return strchr(str, '/') != NULL || strchr(str, '\\') != NULL;
+}
+
+bool is_image_file(const char *filename) {
+    const char *ext = strrchr(filename, '.');
+    if (!ext) return false;
+    return strcasecmp(ext, ".jpg") == 0 ||
+           strcasecmp(ext, ".jpeg") == 0 ||
+           strcasecmp(ext, ".png") == 0;
+}
+
 int main(int argc, char *argv[]) {
-  Image test;
-  char *file_loc = "./../pict/20250529110230_001.jpg";
-  char *save_img = "./pict/test.png";
-  // char *save_crop = "./pict/crop1.png";
+  if (argc < 4) {
+    printf("Usage: %s [image names or paths] [-d input_dir] -o output_dir\n", argv[0]);
+    return 1;
+  }
 
-  Image_load(&test, file_loc);
+  char *input_dir = NULL;
+  char *output_dir = NULL;
+  char *image_paths[MAX_FILES];
+  int image_count = 0;
+  bool has_dash_d = false;
 
-  // ## Crop 1 ##
-  // Image crop1;
-  // Image_create(&crop1, 35, 35, test.channels, false);
-  // Image_crop(&crop1, &test, 1658, 138);
-  Image_greyscale(&test);
-  // Image_write_color(&crop1, 0, 0, 700, 670, 0, 255, 0, 0.7f);
-  // bool is_black = Image_most_black(&test, 1658, 138, 35, 35, 128);
-  // printf("%i\n",is_black);
+  // Parse args
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-d") == 0 && i + 1 < argc) {
+      input_dir = argv[++i];
+      has_dash_d = true;
+    } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+      output_dir = argv[++i];
+    } else if (argv[i][0] != '-') {
+      image_paths[image_count++] = argv[i];
+    }
+  }
 
-  // ## Grey scale ##
-  // Image grey;
-  // int channels = crop1.channels == 4 ? 2 : 1;
-  // Image_create(&grey, crop1.width, crop1.height, channels, false);
-  // for (unsigned char *p = crop1.data, *pg = grey.data;
-  //      p < crop1.data + crop1.size;
-  //      p += crop1.channels, pg += channels) {
-  //   *pg = (uint8_t)((p[0] + p[1] + p[2]) / 3);
-  //   if (channels == 2) pg[1] = p[3];
-  // }
-  // for (int i = 0; i < grey.width * grey.height; ++i) {
-  //   grey.data[i * channels] = TrueColor(grey.data[i * channels]);
-  //   if (channels > 1) grey.data[i * channels + 1] = TrueColor(grey.data[i * channels + 1]);
-  // }
+  if (!output_dir) {
+    fprintf(stderr, "Error: Output directory (-o) is required.\n");
+    return 1;
+  }
 
-  //   int mcontour_len = grey.width * grey.height;
-  //   int *visited = calloc(mcontour_len, sizeof(int));
-  //   Point *contour = malloc(mcontour_len * sizeof(Point));
-  //   int contour_len = 0;
+  // If -d is used, override image_paths[] by scanning input_dir
+  if (has_dash_d) {
+    DIR *dir = opendir(input_dir);
+    if (!dir) {
+      perror("Failed to open input directory");
+      return 1;
+    }
 
-  //   Contour(&crop1, &grey, visited, contour, &contour_len, mcontour_len);
-  //   printf("contour %d\n", contour_len);
+    struct dirent *entry;
+    image_count = 0;
 
-  // Image_free(&grey);
-  //   free(visited);
-  //   free(contour);
+    while ((entry = readdir(dir)) != NULL && image_count < MAX_FILES) {
+      if (is_image_file(entry->d_name)) {
+        image_paths[image_count++] = strdup(entry->d_name); // Save filename only
+      }
+    }
 
-  cJSON* json_data = read_json_file("./src/answer.json");
+    closedir(dir);
+
+    if (image_count == 0) {
+      fprintf(stderr, "No valid image files found in directory: %s\n", input_dir);
+      return 1;
+    }
+  } else {
+    // If not using -d, check that no input path is a directory
+    for (int i = 0; i < image_count; i++) {
+      if (has_dash_d && is_path(image_paths[i])) {
+        fprintf(stderr, "Error: File path '%s' cannot include directories when using -d.\n", image_paths[i]);
+        return 1;
+      }
+    }
+  }
+
+  // Open CSV
+  char csv_path[512];
+  snprintf(csv_path, sizeof(csv_path), "%s/results.csv", output_dir);
+  FILE *csv = fopen(csv_path, "w");
+  if (!csv) {
+    perror("Failed to create CSV file");
+    return 1;
+  }
+  fprintf(csv, "StudentID,SubjectID,Score\n");
+
+  // Load config
+  cJSON *json_data = read_json_file("./src/answer.json");
   int formatID = 0;
-  char* subjectID;
-  char* studentID;
-  int score;
-  OMR_get_values(&test, json_data, formatID, &subjectID, &studentID, &score);
-  printf("Subject : %s\n",subjectID);
-  printf("Student : %s\n", studentID);
-  printf("Score : %d\n",score);
 
+  for (int i = 0; i < image_count; i++) {
+    char full_path[512];
+    if (has_dash_d) {
+      snprintf(full_path, sizeof(full_path), "%s/%s", input_dir, image_paths[i]);
+    } else {
+      strncpy(full_path, image_paths[i], sizeof(full_path));
+    }
 
-  // printf("%s\n", json_str);
-  Image_save(&test, save_img);
-  // Image_save(&crop1, save_crop);
+    Image img;
+    Image_load(&img, full_path);
+    if (img.data == NULL) {
+      fprintf(stderr, "Failed to load image: %s\n", full_path);
+      continue;
+    }
 
-  Image_free(&test);
-  // Image_free(&crop1);
-  // char* json_str = cJSON_Print(used_format);
-  // cJSON_free(json_str);
+    Image_greyscale(&img);
+
+    char *subjectID = NULL, *studentID = NULL;
+    int score = 0;
+    OMR_get_values(&img, json_data, formatID, &subjectID, &studentID, &score);
+
+    printf("Image path: %s\nStudent: %s | Subject: %s | Score: %d\n", full_path, studentID, subjectID, score);
+    fprintf(csv, "%s,%s,%d\n", studentID, subjectID, score);
+
+    // Save image
+    char name_no_ext[256];
+    const char *filename = strrchr(image_paths[i], '/');
+    filename = filename ? filename + 1 : image_paths[i];
+    strncpy(name_no_ext, filename, sizeof(name_no_ext));
+    char *dot = strrchr(name_no_ext, '.');
+    if (dot) *dot = '\0';
+
+    char output_image_path[512];
+    snprintf(output_image_path, sizeof(output_image_path), "%s/%s.jpg", output_dir, name_no_ext);
+    Image_save(&img, output_image_path);
+
+    Image_free(&img);
+    free(subjectID);
+    free(studentID);
+
+    if (has_dash_d) {
+      free(image_paths[i]); // Because strdup was used
+    }
+  }
+
+  fclose(csv);
   cJSON_Delete(json_data);
-
-
   return 0;
 }
