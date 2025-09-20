@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -11,9 +12,39 @@ typedef struct {
   GtkWidget *image;
   GtkWidget *file_list;
   const char *folder_path;
+  const char *out_path;
+  const char *file_path;
 } AppWidgets;
 
 static void populate_file_list(AppWidgets *widgets);
+
+void out_select_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+  GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
+  AppWidgets *widgets = (AppWidgets *)user_data;
+
+  GFile *folder = gtk_file_dialog_select_folder_finish(dialog, res, NULL);
+  if (!folder) {
+    g_print("No folder selected or dialog was cancelled.\n");
+    return;
+  }
+
+  gchar *folder_path = g_file_get_path(folder);
+  g_print("Selected output folder: %s\n", folder_path);
+
+  // Update folder path and populate list
+  widgets->out_path = g_strdup(folder_path);
+  populate_file_list(widgets);
+
+  g_free(folder_path);
+  g_object_unref(folder);
+}
+
+void out_select(GtkButton *button, gpointer user_data) {
+  GtkFileDialog *dialog = gtk_file_dialog_new();
+  GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+  gtk_file_dialog_select_folder(dialog, parent, NULL, out_select_smth, user_data);
+}
 
 void folder_select_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
   GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
@@ -49,6 +80,9 @@ static void on_file_button_clicked(GtkButton *buttont, gpointer user_data) {
 
   gchar *filepath = g_build_filename(widgets->folder_path, filename, NULL);
   GFile *file = g_file_new_for_path(filepath);
+  char *file_path = g_file_get_path(file);
+  g_print("file path %s\n", file_path);
+  widgets->file_path = g_strdup(file_path);
   gtk_picture_set_file(GTK_PICTURE(widgets->image), file);
   g_object_unref(file);
   g_free(filepath);
@@ -95,7 +129,22 @@ static void populate_file_list(AppWidgets *widgets) {
 
 static void on_reload_clicked(GtkButton *buttont, gpointer user_data) {
   AppWidgets *widgets = (AppWidgets *)user_data;
+  g_print("Folder : %s\n", widgets->folder_path);
+  g_print("Out : %s\n", widgets->out_path);
+  g_print("File : %s\n", widgets->file_path);
   populate_file_list(widgets);
+}
+
+static void func_write(GtkButton *buttont, gpointer user_data) {
+  system("echo \"call read_answer\"");
+}
+
+static void func_write_dir(GtkButton *buttont, gpointer user_data) {
+  system("echo \"call read_answer in directory mode\"");
+}
+
+static void func_database(GtkButton *buttont, gpointer user_data) {
+  system("echo \"call database\"");
 }
 
 static void app_window(GtkButton *buttont, gpointer user_data) {
@@ -119,7 +168,10 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
 
   GtkWidget *folder_btn = gtk_button_new_with_label("Folders");
   gtk_box_append(GTK_BOX(left_pane), folder_btn);
-  gtk_widget_set_margin_bottom(folder_btn, 10);
+
+  GtkWidget *out_btn = gtk_button_new_with_label("Output folder");
+  gtk_box_append(GTK_BOX(left_pane), out_btn);
+  gtk_widget_set_margin_bottom(out_btn, 10);
 
   GtkWidget *scroll = gtk_scrolled_window_new();
   gtk_widget_set_vexpand(scroll, TRUE);
@@ -143,12 +195,15 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
   gtk_widget_set_vexpand(image, TRUE);
   gtk_box_append(GTK_BOX(image_box), image);
 
-  GtkWidget *write = gtk_button_new_with_label("Write(Named as $(oldname)_checked)");
+  GtkWidget *write = gtk_button_new_with_label("Check 1 file");
   gtk_widget_set_margin_top(write, 10);
   gtk_box_append(GTK_BOX(image_box), write);
-  GtkWidget *over_write = gtk_button_new_with_label("Overwrite");
-  gtk_widget_set_margin_top(over_write, 10);
-  gtk_box_append(GTK_BOX(image_box), over_write);
+  GtkWidget *write_dir = gtk_button_new_with_label("Check entire directory");
+  gtk_widget_set_margin_top(write_dir, 10);
+  gtk_box_append(GTK_BOX(image_box), write_dir);
+  GtkWidget *database = gtk_button_new_with_label("Send output to database");
+  gtk_widget_set_margin_top(database, 10);
+  gtk_box_append(GTK_BOX(image_box), database);
   GtkWidget *quit = gtk_button_new_with_label("Quit");
   gtk_widget_set_margin_top(quit, 10);
   gtk_box_append(GTK_BOX(image_box), quit);
@@ -158,16 +213,20 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
 
   AppWidgets *widgets = g_malloc(sizeof(AppWidgets));
   const char *folder_path = "";
+  const char *file_path= "";
   widgets->image = image;
   widgets->file_list = file_list;
   widgets->folder_path = folder_path;
+  widgets->file_path = file_path;
 
   populate_file_list(widgets);
 
   g_signal_connect(reload_btn, "clicked", G_CALLBACK(on_reload_clicked), widgets);
   g_signal_connect(folder_btn, "clicked", G_CALLBACK(folder_select), widgets);
-  // g_signal_connect(write, "clicked", G_CALLBACK(smth), window);
-  // g_signal_connect(over_write, "clicked", G_CALLBACK(smth, window);
+  g_signal_connect(out_btn, "clicked", G_CALLBACK(out_select), widgets);
+  g_signal_connect(write, "clicked", G_CALLBACK(func_write), window);
+  g_signal_connect(write_dir, "clicked", G_CALLBACK(func_write_dir), window);
+  g_signal_connect(database, "clicked", G_CALLBACK(func_database), window);
   g_signal_connect_swapped(quit, "clicked", G_CALLBACK(gtk_window_destroy), GTK_WINDOW(window));
 
   gtk_widget_show(window);
