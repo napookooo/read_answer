@@ -1,0 +1,5 @@
+Setup mongodb per instruction: https://www.mongodb.com/docs/manual/installation/
+Create "Grading" database (by default, can change if you are developer, following Developer_manual.txt): https://www.mongodb.com/resources/products/fundamentals/create-database
+Create subject (e.g. Math, Science, etc) collections: https://www.mongodb.com/docs/manual/reference/method/db.createCollection/
+Add arbitrary data using `{collection: subject, age: 205}`
+Add user and password for all the user of the "read_answer" application to use: https://www.mongodb.com/docs/manual/tutorial/create-users/

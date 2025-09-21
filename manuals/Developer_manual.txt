@@ -1,0 +1,32 @@
+Introduction
+  - This is an application for a simple automatic grading system.
+  - Using C language with the help of gtk4 for ui and mongodb for databae.
+
+System Architecture
+  - Consist of 3 modules, the database to store the results, the grading application, and the ui for end users.
+  - The database and grading application work independently, while the ui is the brdige for end users to simplify the usage of both database and grading application.
+
+Installation
+  - Ensure c, make, gtk4, mongodb and mongo-tools are installed.
+  - Clone the repository (https://github.com/napookooo/read_answer) and run `make`.
+  - Setup database using instruction from Database_setup.txt.
+
+Code Structure
+  - All of the source code are in the src/ directory inside the root directory of the project, editing the source code are encourage for a better experience (using `make` to build your newly edited code).
+
+Database Design
+  - Using mongodb, the default configuration are ??.
+  - Developer are allow to design database that better suited the different usage.
+
+Deployment Guide
+  - idk, do whatever you do,
+
+Testing
+  - idk, just do the install and use ui bin to test.
+
+Contribution Guidelines
+  - Make a pull request in the https://github.com/napookooo/read_answer repository.
+  - How to make a pull request -> https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request
+
+Maintenance
+  - idk.

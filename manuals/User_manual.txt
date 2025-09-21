@@ -5,7 +5,7 @@ System Overview
   - This application consist of 2 software, the command line tool for read_answer and a software with ui for an end users.
 
 Installation
-  - Ensure c, make, gtk4 are installed.
+  - Ensure c, make, gtk4 and mongo-tools are installed.
   - Clone the repository (https://github.com/napookooo/read_answer) and run `make`.
   - Use the binary file ui to start using the program.
 
