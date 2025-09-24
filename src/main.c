@@ -589,19 +589,37 @@ cJSON* OMR_get_paper(cJSON* format){
 void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID, char** studentID, int* score){
   OMR_image_crop(img);
   cJSON* used_format = OMR_get_format(json_data, formatID);
+  if (!used_format){
+    printf("Unknown format ID %d\n", formatID);
+    *subjectID = "-1";
+    *studentID = "-1";
+    *score = -2;
+    return;
+  }
   cJSON* paper = OMR_get_paper(used_format);
+  if (!paper){
+    printf("Unknown paper %s\n", used_format);
+    *subjectID = "-1";
+    *studentID = "-1";
+    *score = -3;
+    return;
+  }
   OMR_set_image_size(img, paper);
   *subjectID = OMR_get_subjectID(img, used_format);
   cJSON* used_subject = OMR_get_subject(json_data, *subjectID);
+  if (!used_subject){
+    printf("Unknown subject %s\n", subjectID);
+    *studentID = "-1";
+    *score = -4;
+    return;
+  }
   *studentID = OMR_get_studentID(img, used_format);
   if (!used_subject){
     printf("Unknown subject ID %s\n", *subjectID);
-    *score = -1;
-    printf("Return with unknown subject\n");
+    *score = -5;
     return;
   }
   *score = OMR_get_score(img, used_format, used_subject);
-  printf("Image created\n");
 }
 
 #define MAX_FILES 100
@@ -620,7 +638,7 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] -f format_file -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] [-t Threshold] -f format_file -o output_dir\n", argv[0]);
     return 1;
   }
 
@@ -644,6 +662,8 @@ int main(int argc, char *argv[]) {
       format_file = argv[++i];
     } else if (strcmp(argv[i], "--debug") == 0) {
       Debug = true;
+    } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
+      Threshold = atoi(argv[++i]);
     }
   }
 
@@ -702,6 +722,12 @@ int main(int argc, char *argv[]) {
 
   // Load config
   cJSON *json_data = read_json_file(format_file);
+
+  if (!json_data) {
+    fprintf(stderr, "Failed to parse format file.\n");
+    return 7;
+  }
+
   int formatID = 0;
 
   for (int i = 0; i < image_count; i++) {
