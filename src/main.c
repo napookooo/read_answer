@@ -27,39 +27,40 @@ int Threshold = 224;
 #define SkipAlignment 20
 
 bool Debug = false;
-#define MallocDebug false
+bool MallocDebug = false;
 
 #define amalloc(X) my_malloc( X, __FILE__, __LINE__, __FUNCTION__)
 
 void* my_malloc(size_t size, const char *file, int line, const char *func)
 {
-  return malloc(size);
+  if (!MallocDebug)
+    return malloc(size);
 
   // Debug
-  // void *p = malloc(size);
-  // printf ("Allocated = %s, %i, %s, %p[%li]\n", file, line, func, p, size);
+  void *p = malloc(size);
+  printf ("Allocated = %s, %i, %40s, %p[%li]\n", file, line, func, p, size);
 
-  // /*Link List functionality goes in here*/
-
-  // return p;
+  return p;
 }
 
 #define afree(X) my_free( X, __FILE__, __LINE__, __FUNCTION__)
 
 void my_free(void* ptr, const char *file, int line, const char *func)
 {
-  free(ptr);
+  if (!MallocDebug){
+    free(ptr);
+    return;
+  }
+
   // Debug
-  // if (!ptr) {
-  //     printf("Attempted to free NULL at %s:%d (%s)\n", file, line, func);
-  //     return;
-  // }
+  if (!ptr) {
+      printf("Attempted to free NULL at %s:%d (%s)\n", file, line, func);
+      return;
+  }
 
-  // printf("Freed     = %s, %d, %s, %p\n", file, line, func, ptr);
+  printf("Freed     = %s, %d, %40s, %p\n", file, line, func, ptr);
 
-  // /* Optional: Remove from linked list of allocations */
-
-  // free(ptr);
+  free(ptr);
 }
 
 char default_chars[10] = {'0','1','2','3','4','5','6','7','8','9'};
@@ -638,7 +639,7 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] [-t Threshold] -f format_file -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] [--mdebug] [-t Threshold] -f format_file -o output_dir\n", argv[0]);
     return 1;
   }
 
@@ -662,6 +663,8 @@ int main(int argc, char *argv[]) {
       format_file = argv[++i];
     } else if (strcmp(argv[i], "--debug") == 0) {
       Debug = true;
+    } else if (strcmp(argv[i], "--mdebug") == 0) {
+      MallocDebug = true;
     } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
       Threshold = atoi(argv[++i]);
     }
@@ -771,7 +774,7 @@ int main(int argc, char *argv[]) {
     afree(studentID);
 
     if (has_dash_d) {
-      afree(image_paths[i]); // Because strdup was used
+      free(image_paths[i]); // Because strdup was used
     }
   }
 
