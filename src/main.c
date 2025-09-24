@@ -212,6 +212,7 @@ cJSON* OMR_get_format(cJSON* parent, int format_id){
 }
 
 cJSON* OMR_get_subject(cJSON* parent, const char* subjectID){
+  subjectID = "10";
   cJSON* subjects = cJSON_GetObjectItem(parent,"Subjects");
   cJSON* used_subject = cJSON_GetObjectItem(subjects, subjectID);
 
