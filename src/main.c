@@ -21,11 +21,13 @@
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define Threshold 224
+int Threshold = 224;
 #define AlignmentThreshold 192
+#define AlignmentBlackCount 25
 #define SkipAlignment 20
 
-
+bool Debug = false;
+#define MallocDebug false
 
 #define amalloc(X) my_malloc( X, __FILE__, __LINE__, __FUNCTION__)
 
@@ -240,7 +242,8 @@ void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int widt
         int check_x = x + widthNext * i;
         int check_y = y + heightNext * j;
         ans[i * row + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
-        // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * row + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
+        if (Debug)
+          Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * row + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
       }
     }
   } else {
@@ -251,7 +254,8 @@ void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int widt
         int check_x = x + widthNext * j;
         int check_y = y + heightNext * i;
         ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
-        // Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * column + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
+        if (Debug)
+          Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * column + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
       }
     }
   }
@@ -308,12 +312,10 @@ void OMR_get_choices(cJSON* subject, char* choice_arr, int array_length){
   for (int i = 0; i < array_length; i++){
     cJSON* choice = cJSON_GetArrayItem(choices, i);
 
-    // V-- ADD THIS SAFETY CHECK --V
     if (!cJSON_IsString(choice) || (choice->valuestring == NULL)) {
-      choice_arr[i] = '?'; // Use a default/error character
-      continue;            // Skip to the next item in the loop
+      choice_arr[i] = '?';
+      continue;
     }
-    // ^-- END OF SAFETY CHECK --^
 
     char* choiceStr = choice->valuestring;
     choice_arr[i] = choiceStr[0];
@@ -413,9 +415,12 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
           if (index != 0){
             Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
             questionWidthNext*(questionPrimary ? index : 1), questionHeightNext*(questionPrimary ? 1 : index), 255, 0, 0, 0.7f);
+            
           }
-          Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index : k), checkY+questionHeightNext*(questionPrimary ? k : index),
-          questionWidthNext, questionHeightNext, 0, 255, 0, 0.7f);
+          if (index != -1){
+            Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index : k), checkY+questionHeightNext*(questionPrimary ? k : index),
+            questionWidthNext, questionHeightNext, 0, 255, 0, 0.7f);
+          }
           if (index != (questionPrimary ? questionColumn : questionRow)){
             Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index+1 : k), checkY+questionHeightNext*(questionPrimary ? k : index+1),
             questionWidthNext*(questionPrimary ? questionColumn-index-1 : 1), questionHeightNext*(questionPrimary ? 1 : questionRow-index-1), 255, 0, 0, 0.7f);
@@ -446,13 +451,16 @@ void OMR_get_alignment(Image* img, int* left, int* right, int* up, int* down) {
   int channels = img->channels;
   uint8_t* data = img->data;
 
+  int blackCount = 0;
+
   *left = w;
   for (int x = SkipAlignment; x < w; x++) {
     bool found = false;
     for (int y = SkipAlignment; y < h; y++) {
       int idx = (y * w + x) * channels;
       uint8_t gray = data[idx];
-      if (gray <= AlignmentThreshold) {
+      if (gray <= AlignmentThreshold) blackCount++;
+      if (blackCount >= AlignmentBlackCount){
         *left = x;
         found = true;
         break;
@@ -461,13 +469,15 @@ void OMR_get_alignment(Image* img, int* left, int* right, int* up, int* down) {
     if (found) break;
   }
 
+  blackCount = 0;
   *right = w;
   for (int x = w - SkipAlignment; x >= 0; x--) {
     bool found = false;
     for (int y = SkipAlignment; y < h; y++) {
       int idx = (y * w + x) * channels;
       uint8_t gray = data[idx];
-      if (gray <= AlignmentThreshold) {
+      if (gray <= AlignmentThreshold) blackCount++;
+      if (blackCount >= AlignmentBlackCount){
         *right = w - 1 - x;
         found = true;
         break;
@@ -476,13 +486,15 @@ void OMR_get_alignment(Image* img, int* left, int* right, int* up, int* down) {
     if (found) break;
   }
 
+  blackCount = 0;
   *up = h;
   for (int y = SkipAlignment; y < h; y++) {
     bool found = false;
     for (int x = SkipAlignment; x < w; x++) {
       int idx = (y * w + x) * channels;
       uint8_t gray = data[idx];
-      if (gray <= AlignmentThreshold) {
+      if (gray <= AlignmentThreshold) blackCount++;
+      if (blackCount >= AlignmentBlackCount){
         *up = y;
         found = true;
         break;
@@ -491,13 +503,15 @@ void OMR_get_alignment(Image* img, int* left, int* right, int* up, int* down) {
     if (found) break;
   }
 
+  blackCount = 0;
   *down = h;
   for (int y = h - SkipAlignment; y >= 0; y--) {
     bool found = false;
     for (int x = SkipAlignment; x < w; x++) {
       int idx = (y * w + x) * channels;
       uint8_t gray = data[idx];
-      if (gray <= AlignmentThreshold) {
+      if (gray <= AlignmentThreshold) blackCount++;
+      if (blackCount >= AlignmentBlackCount){
         *down = h - 1 - y;
         found = true;
         break;
@@ -606,7 +620,7 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] -f format_file -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] -f format_file -o output_dir\n", argv[0]);
     return 1;
   }
 
@@ -628,6 +642,8 @@ int main(int argc, char *argv[]) {
       image_paths[image_count++] = argv[i];
     } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
       format_file = argv[++i];
+    } else if (strcmp(argv[i], "--debug") == 0) {
+      Debug = true;
     }
   }
 
