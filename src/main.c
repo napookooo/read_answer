@@ -466,11 +466,12 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] -f format_file -o output_dir\n", argv[0]);
     return 1;
   }
 
   char *input_dir = NULL;
+  char *format_file = NULL;
   char *output_dir = NULL;
   char *image_paths[MAX_FILES];
   int image_count = 0;
@@ -485,7 +486,14 @@ int main(int argc, char *argv[]) {
       output_dir = argv[++i];
     } else if (argv[i][0] != '-') {
       image_paths[image_count++] = argv[i];
+    } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
+      format_file = argv[++i];
     }
+  }
+
+  if (!format_file){
+    fprintf(stderr, "Error: Format file (-f) is required.\n");
+    return 2;
   }
 
   if (!output_dir) {
@@ -498,7 +506,7 @@ int main(int argc, char *argv[]) {
     DIR *dir = opendir(input_dir);
     if (!dir) {
       perror("Failed to open input directory");
-      return 1;
+      return 3;
     }
 
     struct dirent *entry;
@@ -514,14 +522,14 @@ int main(int argc, char *argv[]) {
 
     if (image_count == 0) {
       fprintf(stderr, "No valid image files found in directory: %s\n", input_dir);
-      return 1;
+      return 4;
     }
   } else {
     // If not using -d, check that no input path is a directory
     for (int i = 0; i < image_count; i++) {
       if (has_dash_d && is_path(image_paths[i])) {
         fprintf(stderr, "Error: File path '%s' cannot include directories when using -d.\n", image_paths[i]);
-        return 1;
+        return 5;
       }
     }
   }
@@ -532,12 +540,12 @@ int main(int argc, char *argv[]) {
   FILE *csv = fopen(csv_path, "w");
   if (!csv) {
     perror("Failed to create CSV file");
-    return 1;
+    return 6;
   }
   fprintf(csv, "StudentID,SubjectID,Score\n");
 
   // Load config
-  cJSON *json_data = read_json_file("./src/answer.json");
+  cJSON *json_data = read_json_file(format_file);
   int formatID = 0;
 
   for (int i = 0; i < image_count; i++) {
