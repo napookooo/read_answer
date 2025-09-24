@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <gtk/gtk.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,24 +15,74 @@ typedef struct {
   const char *folder_path;
   const char *out_path;
   const char *file_path;
+  const char *checker;
 } AppWidgets;
 
 typedef struct {
   char *username;
   char *password;
   char *subject;
+  char *ip;
 } DB;
+
+typedef struct {
+  GtkWidget **entries;
+  AppWidgets *widgets;
+} DBDialogData;
+
 static DB *db_creds = NULL;
 
+
+char *fix_space(const char *input) {
+  if (!input) return NULL;
+
+  size_t space_count = 0;
+  for (const char *p = input; *p; p++) {
+    if (*p == ' ') space_count++;
+  }
+
+  size_t len = strlen(input);
+  size_t new_len = len + space_count; 
+  char *result = malloc(new_len + 1);
+  if (!result) return NULL;
+
+  char *dst = result;
+  for (const char *p = input; *p; p++) {
+    if (*p == ' ') {
+      *dst++ = '\\';
+      *dst++ = ' ';
+    } else {
+      *dst++ = *p;
+    }
+  }
+  *dst = '\0';
+
+  return result;
+}
+
 static void populate_file_list(AppWidgets *widgets);
+char *escape_spaces(const char *path) {
+  GString *result = g_string_new(NULL);
+  for (const char *p = path; *p; p++) {
+    if (*p == ' ') {
+      g_string_append(result, "\\ ");
+    } else {
+      g_string_append_c(result, *p);
+    }
+  }
+  return g_string_free(result, FALSE);
+}
 
 static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_data) {
-  if (response == GTK_RESPONSE_OK) {
-    GtkWidget **entries = (GtkWidget **)user_data;
+  DBDialogData *data = (DBDialogData *)user_data;
+  GtkWidget **entries = data->entries;
+  AppWidgets *widgets = data->widgets;
 
+  if (response == GTK_RESPONSE_OK) {
     const char *username = gtk_editable_get_text(GTK_EDITABLE(entries[0]));
     const char *password = gtk_editable_get_text(GTK_EDITABLE(entries[1]));
     const char *subject  = gtk_editable_get_text(GTK_EDITABLE(entries[2]));
+    const char *ip       = gtk_editable_get_text(GTK_EDITABLE(entries[3]));
 
     if (!db_creds) {
       db_creds = g_malloc0(sizeof(DB));
@@ -40,19 +91,37 @@ static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_da
     g_free(db_creds->username);
     g_free(db_creds->password);
     g_free(db_creds->subject);
+    g_free(db_creds->ip);
 
     db_creds->username = g_strdup(username);
     db_creds->password = g_strdup(password);
     db_creds->subject  = g_strdup(subject);
+    db_creds->ip       = g_strdup(ip);
 
-    g_print("Stored DB creds: user=%s subject=%s\n", db_creds->username, db_creds->subject);
+    // g_print("Stored DB creds: user=%s subject=%s ip=%s\n", db_creds->username, db_creds->subject, db_creds->ip);
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+             "mongoimport --uri 'mongodb://%s:%s@%s' --db=Answer_database --collection=%s --type=csv --headerline --file='%s/results.csv'",
+             db_creds->username,
+             db_creds->password,
+             db_creds->ip,
+             db_creds->subject,
+             widgets->out_path);
+
+    g_print("%s\n", cmd);
+    system(cmd);
   }
 
+  g_free(entries);
+  g_free(data);
   gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
 static void show_db_dialog(GtkButton *button, gpointer user_data) {
+  AppWidgets *widgets = (AppWidgets *)user_data;
   GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
     "Database Credentials",
     parent,
@@ -75,13 +144,16 @@ static void show_db_dialog(GtkButton *button, gpointer user_data) {
   GtkWidget *entry_user = gtk_entry_new();
   GtkWidget *entry_pass = gtk_entry_new();
   GtkWidget *entry_subj = gtk_entry_new();
+  GtkWidget *entry_ip = gtk_entry_new();
 
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_user), "Username");
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_pass), "Password");
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_subj), "Subject");
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_ip), "IP address");
 
-  gtk_entry_set_visibility(GTK_ENTRY(entry_pass), FALSE); // hide password
+  gtk_entry_set_visibility(GTK_ENTRY(entry_pass), FALSE);
 
+  // Add labels and entries
   gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Username:"), 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), entry_user, 1, 0, 1, 1);
 
@@ -91,8 +163,22 @@ static void show_db_dialog(GtkButton *button, gpointer user_data) {
   gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Subject:"), 0, 2, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), entry_subj, 1, 2, 1, 1);
 
-  GtkWidget *entries[3] = { entry_user, entry_pass, entry_subj };
-  g_signal_connect(dialog, "response", G_CALLBACK(db_dialog_response), entries);
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("IP Address:"), 0, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), entry_ip, 1, 3, 1, 1);
+
+  // Store entries
+  GtkWidget **entries = g_new(GtkWidget *, 4);
+  entries[0] = entry_user;
+  entries[1] = entry_pass;
+  entries[2] = entry_subj;
+  entries[3] = entry_ip;
+
+  // Wrap entries with widgets for callback
+  DBDialogData *dialog_data = g_malloc(sizeof(DBDialogData));
+  dialog_data->entries = entries;
+  dialog_data->widgets = widgets;
+
+  g_signal_connect(dialog, "response", G_CALLBACK(db_dialog_response), dialog_data);
 
   gtk_widget_show(dialog);
 }
@@ -125,6 +211,34 @@ void out_select(GtkButton *button, gpointer user_data) {
   gtk_file_dialog_select_folder(dialog, parent, NULL, out_select_smth, user_data);
 }
 
+void check_sel_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+  GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
+  AppWidgets *widgets = (AppWidgets *)user_data;
+
+  GFile *file = gtk_file_dialog_open_finish(dialog, res, NULL);
+  if (!file) {
+    g_print("No file selected or dialog was cancelled.\n");
+    return;
+  }
+
+  gchar *file_path = g_file_get_path(file);
+  g_print("Selected output file: %s\n", file_path);
+
+  // Store selected file path
+  // g_free(widgets->checker);
+  widgets->checker = g_strdup(file_path);
+
+  g_free(file_path);
+  g_object_unref(file);
+}
+
+void check_sel(GtkButton *button, gpointer user_data) {
+  GtkFileDialog *dialog = gtk_file_dialog_new();
+  GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+  gtk_file_dialog_open(dialog, parent, NULL, check_sel_smth, user_data);
+}
+
 void folder_select_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
   GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
   AppWidgets *widgets = (AppWidgets *)user_data;
@@ -140,6 +254,7 @@ void folder_select_smth(GObject *source_object, GAsyncResult *res, gpointer user
 
   // Update folder path and populate list
   widgets->folder_path = g_strdup(folder_path);
+  g_print("Selected folder again: %s\n", widgets->folder_path);
   populate_file_list(widgets);
 
   g_free(folder_path);
@@ -215,14 +330,41 @@ static void on_reload_clicked(GtkButton *buttont, gpointer user_data) {
 }
 
 static void func_write(GtkButton *buttont, gpointer user_data) {
-  char *test = "test";
+  AppWidgets *widgets = (AppWidgets *)user_data;
+  if (!widgets->file_path || !widgets->checker || !widgets->out_path) {
+    g_print("Error: Missing paths or parameters.\n");
+    return;
+  }
   char cmd[256];
-  snprintf(cmd, sizeof(cmd), "echo \"call read_answer %s\"", test);
+  char cmd2[256];
+  char *fin_path = fix_space(widgets->file_path);
+  snprintf(cmd, sizeof(cmd), "./read_ans %s -f %s -o %s", fin_path, widgets->checker, widgets->out_path);
+  snprintf(cmd2, sizeof(cmd2), "rm -rf %s/*", widgets->out_path);
+  g_print("%s\n", cmd);
+  g_print("%s\n", cmd2);
+  system(cmd2);
   system(cmd);
+  widgets->folder_path = widgets->out_path;
+  populate_file_list(widgets);
 }
 
 static void func_write_dir(GtkButton *buttont, gpointer user_data) {
-  system("echo \"call read_answer in directory mode\"");
+  AppWidgets *widgets = (AppWidgets *)user_data;
+  if (!widgets->folder_path || !widgets->checker || !widgets->out_path) {
+    g_print("Error: Missing paths or parameters.\n");
+    return;
+  }
+  char cmd[256];
+  char cmd2[256];
+  char *fin_path = fix_space(widgets->folder_path);
+  snprintf(cmd, sizeof(cmd), "./read_ans -d %s -f %s -o %s", fin_path, widgets->checker, widgets->out_path);
+  snprintf(cmd2, sizeof(cmd2), "rm -rf %s/*", widgets->out_path);
+  g_print("%s\n", cmd);
+  g_print("%s\n", cmd2);
+  system(cmd2);
+  system(cmd);
+  widgets->folder_path = widgets->out_path;
+  populate_file_list(widgets);
 }
 
 // static void func_database(GtkButton *buttont, gpointer user_data) {
@@ -253,7 +395,10 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
 
   GtkWidget *out_btn = gtk_button_new_with_label("Output folder");
   gtk_box_append(GTK_BOX(left_pane), out_btn);
-  gtk_widget_set_margin_bottom(out_btn, 10);
+
+  GtkWidget *check_btn = gtk_button_new_with_label("Pick the right answer");
+  gtk_box_append(GTK_BOX(left_pane), check_btn);
+  gtk_widget_set_margin_bottom(check_btn, 10);
 
   GtkWidget *scroll = gtk_scrolled_window_new();
   gtk_widget_set_vexpand(scroll, TRUE);
@@ -306,9 +451,10 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
   g_signal_connect(reload_btn, "clicked", G_CALLBACK(on_reload_clicked), widgets);
   g_signal_connect(folder_btn, "clicked", G_CALLBACK(folder_select), widgets);
   g_signal_connect(out_btn, "clicked", G_CALLBACK(out_select), widgets);
-  g_signal_connect(write, "clicked", G_CALLBACK(func_write), window);
-  g_signal_connect(write_dir, "clicked", G_CALLBACK(func_write_dir), window);
-  g_signal_connect(database, "clicked", G_CALLBACK(show_db_dialog), window);
+  g_signal_connect(check_btn, "clicked", G_CALLBACK(check_sel), widgets);
+  g_signal_connect(write, "clicked", G_CALLBACK(func_write), widgets);
+  g_signal_connect(write_dir, "clicked", G_CALLBACK(func_write_dir), widgets);
+  g_signal_connect(database, "clicked", G_CALLBACK(show_db_dialog), widgets);
   g_signal_connect_swapped(quit, "clicked", G_CALLBACK(gtk_window_destroy), GTK_WINDOW(window));
 
   gtk_widget_show(window);
