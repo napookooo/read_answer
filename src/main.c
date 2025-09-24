@@ -72,7 +72,8 @@ typedef struct {
 } Image;
 
 void Image_load(Image *img, const char *fname) {
-  if((img->data = stbi_load(fname, &img->width, &img->height, &img->channels, 0)) != NULL) {
+  if((img->data = stbi_load(fname, &img->width, &img->height, &img->channels, 3)) != NULL) {
+    img->channels = 3;
     img->size = img->width * img->height * img->channels;
     img->allocation_ = STB_ALLOCATED;
   }
