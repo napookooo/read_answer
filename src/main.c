@@ -16,7 +16,86 @@ typedef struct {
   const char *file_path;
 } AppWidgets;
 
+typedef struct {
+  char *username;
+  char *password;
+  char *subject;
+} DB;
+static DB *db_creds = NULL;
+
 static void populate_file_list(AppWidgets *widgets);
+
+static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_data) {
+  if (response == GTK_RESPONSE_OK) {
+    GtkWidget **entries = (GtkWidget **)user_data;
+
+    const char *username = gtk_editable_get_text(GTK_EDITABLE(entries[0]));
+    const char *password = gtk_editable_get_text(GTK_EDITABLE(entries[1]));
+    const char *subject  = gtk_editable_get_text(GTK_EDITABLE(entries[2]));
+
+    if (!db_creds) {
+      db_creds = g_malloc0(sizeof(DB));
+    }
+
+    g_free(db_creds->username);
+    g_free(db_creds->password);
+    g_free(db_creds->subject);
+
+    db_creds->username = g_strdup(username);
+    db_creds->password = g_strdup(password);
+    db_creds->subject  = g_strdup(subject);
+
+    g_print("Stored DB creds: user=%s subject=%s\n", db_creds->username, db_creds->subject);
+  }
+
+  gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void show_db_dialog(GtkButton *button, gpointer user_data) {
+  GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(
+    "Database Credentials",
+    parent,
+    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    "_Cancel", GTK_RESPONSE_CANCEL,
+    "_OK", GTK_RESPONSE_OK,
+    NULL
+  );
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+  gtk_widget_set_margin_top(grid, 10);
+  gtk_widget_set_margin_bottom(grid, 10);
+  gtk_widget_set_margin_start(grid, 10);
+  gtk_widget_set_margin_end(grid, 10);
+  gtk_box_append(GTK_BOX(content), grid);
+
+  GtkWidget *entry_user = gtk_entry_new();
+  GtkWidget *entry_pass = gtk_entry_new();
+  GtkWidget *entry_subj = gtk_entry_new();
+
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_user), "Username");
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_pass), "Password");
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_subj), "Subject");
+
+  gtk_entry_set_visibility(GTK_ENTRY(entry_pass), FALSE); // hide password
+
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Username:"), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), entry_user, 1, 0, 1, 1);
+
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Password:"), 0, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), entry_pass, 1, 1, 1, 1);
+
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Subject:"), 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), entry_subj, 1, 2, 1, 1);
+
+  GtkWidget *entries[3] = { entry_user, entry_pass, entry_subj };
+  g_signal_connect(dialog, "response", G_CALLBACK(db_dialog_response), entries);
+
+  gtk_widget_show(dialog);
+}
 
 void out_select_smth(GObject *source_object, GAsyncResult *res, gpointer user_data) {
   GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
@@ -136,16 +215,19 @@ static void on_reload_clicked(GtkButton *buttont, gpointer user_data) {
 }
 
 static void func_write(GtkButton *buttont, gpointer user_data) {
-  system("echo \"call read_answer\"");
+  char *test = "test";
+  char cmd[256];
+  snprintf(cmd, sizeof(cmd), "echo \"call read_answer %s\"", test);
+  system(cmd);
 }
 
 static void func_write_dir(GtkButton *buttont, gpointer user_data) {
   system("echo \"call read_answer in directory mode\"");
 }
 
-static void func_database(GtkButton *buttont, gpointer user_data) {
-  system("echo \"call database\"");
-}
+// static void func_database(GtkButton *buttont, gpointer user_data) {
+//   system("echo \"call database\"");
+// }
 
 static void app_window(GtkButton *buttont, gpointer user_data) {
   GtkApplication *app = GTK_APPLICATION(user_data);
@@ -226,7 +308,7 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
   g_signal_connect(out_btn, "clicked", G_CALLBACK(out_select), widgets);
   g_signal_connect(write, "clicked", G_CALLBACK(func_write), window);
   g_signal_connect(write_dir, "clicked", G_CALLBACK(func_write_dir), window);
-  g_signal_connect(database, "clicked", G_CALLBACK(func_database), window);
+  g_signal_connect(database, "clicked", G_CALLBACK(show_db_dialog), window);
   g_signal_connect_swapped(quit, "clicked", G_CALLBACK(gtk_window_destroy), GTK_WINDOW(window));
 
   gtk_widget_show(window);
@@ -235,40 +317,6 @@ static void app_window(GtkButton *buttont, gpointer user_data) {
     gtk_window_destroy(GTK_WINDOW(prev_window));
   }
 }
-
-// static void app_window(GtkButton *buttont, gpointer user_data) {
-//   GtkApplication *app = GTK_APPLICATION(user_data);
-//   GtkWidget *window;
-//   GtkWidget *grid;
-//   GtkFileDialog *dialog;
-//   GtkWidget *button;
-//
-//   window = gtk_application_window_new (app);
-//   gtk_window_set_title (GTK_WINDOW (window), "Lovely Application");
-//   grid = gtk_grid_new ();
-//   gtk_window_set_child (GTK_WINDOW (window), grid);
-//   gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
-//
-//   dialog = gtk_file_dialog_new();
-//
-//   button = gtk_button_new_with_label ("Choose folder");
-//   g_signal_connect(button, "clicked", G_CALLBACK (folder_select), dialog);
-//   gtk_grid_attach (GTK_GRID (grid), button, 0, 0, 1, 1);
-//   gtk_widget_set_size_request(button, 200, 100);
-//   gtk_widget_set_hexpand(button, TRUE);
-//
-//   button = gtk_button_new_with_label ("Quit");
-//   g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy), window);
-//   gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 2, 1);
-//   gtk_widget_set_size_request(button, 200, 100);
-//   gtk_widget_set_hexpand(button, TRUE);
-//
-//   gtk_window_present (GTK_WINDOW (window));
-//   GtkWidget *prev_window = gtk_widget_get_ancestor(GTK_WIDGET(buttont), GTK_TYPE_WINDOW);
-//   if (prev_window) {
-//     gtk_window_destroy(GTK_WINDOW(prev_window));
-//   }
-// }
 
 static void check_entry(GtkButton *buttont, gpointer user_data) {
   AppEntry *data = (AppEntry *)user_data;
