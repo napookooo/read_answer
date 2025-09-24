@@ -2,6 +2,8 @@
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize2.h"
 #include "cJSON.h"
 
 #include <dirent.h>
@@ -19,7 +21,9 @@
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define Threshold 172
+#define Threshold 224
+#define AlignmentThreshold 192
+#define SkipAlignment 20
 
 
 
@@ -151,9 +155,10 @@ void Image_greyscale(Image* img){
 }
 
 bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value){
-  int area = width * height;
+  float pi = 3.1415927;
+  int area = (int)(width * height * pi / 4);
   int shade = 0;
-  unsigned char calculated_value = 0;
+  unsigned int calculated_value = 0;
 
   int min_x = MIN(img->width, x+width);
   int min_y = MIN(img->height, y+height);
@@ -162,7 +167,6 @@ bool Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
       shade += img->data[(i * img->width + j) * img->channels];
     }
   calculated_value = shade / area;
-  // printf("%i %i ",calculated_value, pass_value);
   if (calculated_value <= pass_value) return true;
   return false;
 }
@@ -436,8 +440,143 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
   return current_score;
 }
 
+void OMR_get_alignment(Image* img, int* left, int* right, int* up, int* down) {
+  int w = img->width;
+  int h = img->height;
+  int channels = img->channels;
+  uint8_t* data = img->data;
+
+  *left = w;
+  for (int x = SkipAlignment; x < w; x++) {
+    bool found = false;
+    for (int y = SkipAlignment; y < h; y++) {
+      int idx = (y * w + x) * channels;
+      uint8_t gray = data[idx];
+      if (gray <= AlignmentThreshold) {
+        *left = x;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  *right = w;
+  for (int x = w - SkipAlignment; x >= 0; x--) {
+    bool found = false;
+    for (int y = SkipAlignment; y < h; y++) {
+      int idx = (y * w + x) * channels;
+      uint8_t gray = data[idx];
+      if (gray <= AlignmentThreshold) {
+        *right = w - 1 - x;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  *up = h;
+  for (int y = SkipAlignment; y < h; y++) {
+    bool found = false;
+    for (int x = SkipAlignment; x < w; x++) {
+      int idx = (y * w + x) * channels;
+      uint8_t gray = data[idx];
+      if (gray <= AlignmentThreshold) {
+        *up = y;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  *down = h;
+  for (int y = h - SkipAlignment; y >= 0; y--) {
+    bool found = false;
+    for (int x = SkipAlignment; x < w; x++) {
+      int idx = (y * w + x) * channels;
+      uint8_t gray = data[idx];
+      if (gray <= AlignmentThreshold) {
+        *down = h - 1 - y;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  if (*left == w || *right == w || *up == h || *down == h) {
+    *left = *right = *up = *down = -1;
+  }
+
+  printf("%d %d %d %d\n", *left, *right, *up, *down);
+}
+
+void OMR_image_crop(Image* img) {
+  int left, right, up, down;
+  OMR_get_alignment(img, &left, &right, &up, &down);
+
+  if (left < 0 || right < 0 || up < 0 || down < 0) {
+    printf("Warning: No content found to crop.\n");
+    return;
+  }
+
+  int new_width = img->width - left - right;
+  int new_height = img->height - up - down;
+
+  if (new_width <= 0 || new_height <= 0) {
+    printf("Error: Invalid crop dimensions.\n");
+    return;
+  }
+
+  Image cropped;
+  Image_create(&cropped, new_width, new_height, img->channels, false);
+  Image_crop(&cropped, img, left, up);
+
+  Image_free(img);
+  *img = cropped;
+}
+
+void OMR_set_image_size(Image* img, cJSON* paper) {
+  int target_w = cJSON_GetObjectItem(paper, "Width")->valueint;
+  int target_h = cJSON_GetObjectItem(paper, "Height")->valueint;
+  int channels = img->channels;
+
+  if (img->width == target_w && img->height == target_h) {
+    return;
+  }
+
+  uint8_t* resized_data = (uint8_t*)amalloc(target_w * target_h * channels);
+  if (!resized_data) {
+    fprintf(stderr, "Failed to allocate resized image.\n");
+    return;
+  }
+
+  // Resize using stb_image_resize
+  stbir_resize_uint8_linear(img->data, img->width, img->height, 0,
+                     resized_data, target_w, target_h, 0,
+                     channels);
+
+  // Free old data
+  afree(img->data);  // or stbi_image_free if STB_ALLOCATED
+
+  img->data = resized_data;
+  img->width = target_w;
+  img->height = target_h;
+  img->size = target_w * target_h * channels;
+  img->allocation_ = SELF_ALLOCATED;
+}
+
+cJSON* OMR_get_paper(cJSON* format){
+  return cJSON_GetObjectItem(format, "Paper");
+}
+
 void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID, char** studentID, int* score){
+  OMR_image_crop(img);
   cJSON* used_format = OMR_get_format(json_data, formatID);
+  cJSON* paper = OMR_get_paper(used_format);
+  OMR_set_image_size(img, paper);
   *subjectID = OMR_get_subjectID(img, used_format);
   cJSON* used_subject = OMR_get_subject(json_data, *subjectID);
   *studentID = OMR_get_studentID(img, used_format);
@@ -447,9 +586,8 @@ void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID
     printf("Return with unknown subject\n");
     return;
   }
-  printf("Getting score...\n");
   *score = OMR_get_score(img, used_format, used_subject);
-  printf("Got values\n");
+  printf("Image created\n");
 }
 
 #define MAX_FILES 100
