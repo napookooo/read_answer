@@ -1,0 +1,51 @@
+=================================================================
+==20585==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x7b6315dade11 at pc 0x55ae258d320f bp 0x7ffea1f237a0 sp 0x7ffea1f23790
+READ of size 1 at 0x7b6315dade11 thread T0
+    #0 0x55ae258d320e in main (/home/cuzof/kode/pbl/read_answer/main+0xa20e) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+    #1 0x7f6319a27674  (/usr/lib/libc.so.6+0x27674) (BuildId: 4fe011c94a88e8aeb6f2201b9eb369f42b4a1e9e)
+    #2 0x7f6319a27728 in __libc_start_main (/usr/lib/libc.so.6+0x27728) (BuildId: 4fe011c94a88e8aeb6f2201b9eb369f42b4a1e9e)
+    #3 0x55ae258d3574 in _start (/home/cuzof/kode/pbl/read_answer/main+0xa574) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+
+0x7b6315dade11 is located 0 bytes after 8697361-byte region [0x7b6315562800,0x7b6315dade11)
+allocated by thread T0 here:
+    #0 0x7f6319f20cb5 in malloc /usr/src/debug/gcc/gcc/libsanitizer/asan/asan_malloc_linux.cpp:67
+    #1 0x55ae259370ab in stbi__load_main (/home/cuzof/kode/pbl/read_answer/main+0x6e0ab) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+    #2 0x55ae2593ed5f in stbi__load_and_postprocess_8bit (/home/cuzof/kode/pbl/read_answer/main+0x75d5f) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+    #3 0x55ae258d2364 in main (/home/cuzof/kode/pbl/read_answer/main+0x9364) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+    #4 0x7f6319a27674  (/usr/lib/libc.so.6+0x27674) (BuildId: 4fe011c94a88e8aeb6f2201b9eb369f42b4a1e9e)
+    #5 0x7f6319a27728 in __libc_start_main (/usr/lib/libc.so.6+0x27728) (BuildId: 4fe011c94a88e8aeb6f2201b9eb369f42b4a1e9e)
+    #6 0x55ae258d3574 in _start (/home/cuzof/kode/pbl/read_answer/main+0xa574) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow (/home/cuzof/kode/pbl/read_answer/main+0xa20e) (BuildId: 9f828fecb51cda90f1afb54141972ebab445bcbf) in main
+Shadow bytes around the buggy address:
+  0x7b6315dadb80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7b6315dadc00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7b6315dadc80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7b6315dadd00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7b6315dadd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7b6315dade00: 00 00[01]fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b6315dade80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b6315dadf00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b6315dadf80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b6315dae000: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x7b6315dae080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==20585==ABORTING
