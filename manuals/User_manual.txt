@@ -1,0 +1,24 @@
+Introduction
+  - This is an application for a simple automatic grading system.
+
+System Overview
+  - This application consist of 2 software, the command line tool for read_answer and a software with ui for an end users.
+
+Installation
+  - Ensure c, make, gtk4 and mongo-tools are installed.
+  - Clone the repository (https://github.com/napookooo/read_answer) and run `make`.
+  - Use the binary file ui to start using the program.
+
+Getting Started
+  - Run the binary file 'ui' to start using, the user will require a password to continue forward with the program, after the right password is entered user can now use the program.
+
+Features and Functions
+  - Grading 1 selected file at a time.
+  - Grading 1 selected directory at a time.
+  - Push the result in output directory into a database.
+
+FAQ
+  - If there are any questions, they can be ask in https://github.com/napookooo/read_answer.
+
+Support
+  - User can create issues in the public repository (https://github.com/napookooo/read_answer) in github.

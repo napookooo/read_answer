@@ -1,0 +1,19 @@
+Setup mongodb per instruction: https://www.mongodb.com/docs/manual/installation/
+Add user and password for all the user of the "read_answer" application to use: https://www.mongodb.com/docs/manual/tutorial/create-users/
+Each user have a the same db as "Answer_database" and different collection "$subject" for each user
+Example:  #user = teacher01, password = password01, subject = math;
+using mongosh >
+  db.createUser({
+    user: "teacher01",
+    pwd: "password01",
+    roles: [
+      {
+        role: "readWrite",
+        db: "Answer_database",
+        collection: "Math"
+      }
+    ]
+  })
+
+
+mongoimport --uri 'mongodb://myTester:password@127.0.0.1' --db=test --collection=test-collection --file=test.json
