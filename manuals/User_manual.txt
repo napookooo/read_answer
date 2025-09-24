@@ -18,7 +18,7 @@ Features and Functions
   - Push the result in output directory into a database.
 
 FAQ
-
+  - If there are any questions, they can be ask in https://github.com/napookooo/read_answer.
 
 Support
   - User can create issues in the public repository (https://github.com/napookooo/read_answer) in github.
