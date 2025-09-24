@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <gtk/gtk.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,58 +22,67 @@ typedef struct {
   char *username;
   char *password;
   char *subject;
+  char *ip;
 } DB;
+
+typedef struct {
+  GtkWidget **entries;
+  AppWidgets *widgets;
+} DBDialogData;
 
 static DB *db_creds = NULL;
 
 
 char *fix_space(const char *input) {
-    if (!input) return NULL;
+  if (!input) return NULL;
 
-    size_t space_count = 0;
-    for (const char *p = input; *p; p++) {
-        if (*p == ' ') space_count++;
+  size_t space_count = 0;
+  for (const char *p = input; *p; p++) {
+    if (*p == ' ') space_count++;
+  }
+
+  size_t len = strlen(input);
+  size_t new_len = len + space_count; 
+  char *result = malloc(new_len + 1);
+  if (!result) return NULL;
+
+  char *dst = result;
+  for (const char *p = input; *p; p++) {
+    if (*p == ' ') {
+      *dst++ = '\\';
+      *dst++ = ' ';
+    } else {
+      *dst++ = *p;
     }
+  }
+  *dst = '\0';
 
-    size_t len = strlen(input);
-    size_t new_len = len + space_count; 
-    char *result = malloc(new_len + 1);
-    if (!result) return NULL;
-
-    char *dst = result;
-    for (const char *p = input; *p; p++) {
-        if (*p == ' ') {
-            *dst++ = '\\';
-            *dst++ = ' ';
-        } else {
-            *dst++ = *p;
-        }
-    }
-    *dst = '\0';
-
-    return result;
+  return result;
 }
 
 static void populate_file_list(AppWidgets *widgets);
 char *escape_spaces(const char *path) {
-    GString *result = g_string_new(NULL);
-    for (const char *p = path; *p; p++) {
-        if (*p == ' ') {
-            g_string_append(result, "\\ ");
-        } else {
-            g_string_append_c(result, *p);
-        }
+  GString *result = g_string_new(NULL);
+  for (const char *p = path; *p; p++) {
+    if (*p == ' ') {
+      g_string_append(result, "\\ ");
+    } else {
+      g_string_append_c(result, *p);
     }
-    return g_string_free(result, FALSE);
+  }
+  return g_string_free(result, FALSE);
 }
 
 static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_data) {
-  GtkWidget **entries = (GtkWidget **)user_data;
+  DBDialogData *data = (DBDialogData *)user_data;
+  GtkWidget **entries = data->entries;
+  AppWidgets *widgets = data->widgets;
 
   if (response == GTK_RESPONSE_OK) {
     const char *username = gtk_editable_get_text(GTK_EDITABLE(entries[0]));
     const char *password = gtk_editable_get_text(GTK_EDITABLE(entries[1]));
     const char *subject  = gtk_editable_get_text(GTK_EDITABLE(entries[2]));
+    const char *ip       = gtk_editable_get_text(GTK_EDITABLE(entries[3]));
 
     if (!db_creds) {
       db_creds = g_malloc0(sizeof(DB));
@@ -81,25 +91,37 @@ static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_da
     g_free(db_creds->username);
     g_free(db_creds->password);
     g_free(db_creds->subject);
+    g_free(db_creds->ip);
 
     db_creds->username = g_strdup(username);
     db_creds->password = g_strdup(password);
     db_creds->subject  = g_strdup(subject);
+    db_creds->ip       = g_strdup(ip);
 
-    // g_print("Stored DB creds: user=%s subject=%s\n", db_creds->username, db_creds->subject);
-    //
-    char cmd[256] = "echo test";
-    // snprintf(cmd, sizeof(cmd), "", );
+    // g_print("Stored DB creds: user=%s subject=%s ip=%s\n", db_creds->username, db_creds->subject, db_creds->ip);
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+             "mongoimport --uri 'mongodb://%s:%s@%s' --db=Answer_database --collection=%s --file='%s/result.csv'",
+             db_creds->username,
+             db_creds->password,
+             db_creds->ip,
+             db_creds->subject,
+             widgets->out_path);
+
+    g_print("%s\n", cmd);
     system(cmd);
-
   }
 
-  g_free(entries);  // <--- free heap-allocated array
+  g_free(entries);
+  g_free(data);
   gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
 static void show_db_dialog(GtkButton *button, gpointer user_data) {
+  AppWidgets *widgets = (AppWidgets *)user_data;
   GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
   GtkWidget *dialog = gtk_dialog_new_with_buttons(
     "Database Credentials",
     parent,
@@ -122,13 +144,16 @@ static void show_db_dialog(GtkButton *button, gpointer user_data) {
   GtkWidget *entry_user = gtk_entry_new();
   GtkWidget *entry_pass = gtk_entry_new();
   GtkWidget *entry_subj = gtk_entry_new();
+  GtkWidget *entry_ip = gtk_entry_new();
 
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_user), "Username");
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_pass), "Password");
   gtk_entry_set_placeholder_text(GTK_ENTRY(entry_subj), "Subject");
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry_ip), "IP address");
 
-  gtk_entry_set_visibility(GTK_ENTRY(entry_pass), FALSE); // hide password
+  gtk_entry_set_visibility(GTK_ENTRY(entry_pass), FALSE);
 
+  // Add labels and entries
   gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Username:"), 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), entry_user, 1, 0, 1, 1);
 
@@ -138,11 +163,22 @@ static void show_db_dialog(GtkButton *button, gpointer user_data) {
   gtk_grid_attach(GTK_GRID(grid), gtk_label_new("Subject:"), 0, 2, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), entry_subj, 1, 2, 1, 1);
 
-  GtkWidget **entries = g_new(GtkWidget *, 3);
+  gtk_grid_attach(GTK_GRID(grid), gtk_label_new("IP Address:"), 0, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), entry_ip, 1, 3, 1, 1);
+
+  // Store entries
+  GtkWidget **entries = g_new(GtkWidget *, 4);
   entries[0] = entry_user;
   entries[1] = entry_pass;
   entries[2] = entry_subj;
-  g_signal_connect(dialog, "response", G_CALLBACK(db_dialog_response), entries);
+  entries[3] = entry_ip;
+
+  // Wrap entries with widgets for callback
+  DBDialogData *dialog_data = g_malloc(sizeof(DBDialogData));
+  dialog_data->entries = entries;
+  dialog_data->widgets = widgets;
+
+  g_signal_connect(dialog, "response", G_CALLBACK(db_dialog_response), dialog_data);
 
   gtk_widget_show(dialog);
 }
