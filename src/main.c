@@ -20,6 +20,41 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define Threshold 172
 
+
+
+#define amalloc(X) my_malloc( X, __FILE__, __LINE__, __FUNCTION__)
+
+void* my_malloc(size_t size, const char *file, int line, const char *func)
+{
+  return malloc(size);
+
+  // Debug
+  // void *p = malloc(size);
+  // printf ("Allocated = %s, %i, %s, %p[%li]\n", file, line, func, p, size);
+
+  // /*Link List functionality goes in here*/
+
+  // return p;
+}
+
+#define afree(X) my_free( X, __FILE__, __LINE__, __FUNCTION__)
+
+void my_free(void* ptr, const char *file, int line, const char *func)
+{
+  free(ptr);
+  // Debug
+  // if (!ptr) {
+  //     printf("Attempted to free NULL at %s:%d (%s)\n", file, line, func);
+  //     return;
+  // }
+
+  // printf("Freed     = %s, %d, %s, %p\n", file, line, func, ptr);
+
+  // /* Optional: Remove from linked list of allocations */
+
+  // free(ptr);
+}
+
 char default_chars[10] = {'0','1','2','3','4','5','6','7','8','9'};
 
 enum allocation_type {
@@ -51,7 +86,7 @@ void Image_free(Image *img) {
     if(img->allocation_ == STB_ALLOCATED) {
       stbi_image_free(img->data);
     } else {
-      free(img->data);
+      afree(img->data);
     }
     img->data = NULL;
     img->width = 0;
@@ -63,7 +98,7 @@ void Image_free(Image *img) {
 
 void Image_create(Image *img, int width, int height, int channels, bool zeroed) {
   size_t size = width * height * channels;
-  img->data = zeroed ? calloc(size, 1) : malloc(size);
+  img->data = zeroed ? calloc(size, 1) : amalloc(size);
   if(img->data != NULL) {
     img->width = width;
     img->height = height;
@@ -73,7 +108,6 @@ void Image_create(Image *img, int width, int height, int channels, bool zeroed) 
   }
 }
 
-// fuck me
 int inside(const int x, const int y, const int w, const int h){
   return x>=0 && y>=0 && x<w && y<h;
 }
@@ -81,60 +115,6 @@ int inside(const int x, const int y, const int w, const int h){
 typedef struct {
   int x, y;
 } Point;
-
-// void Contour(Image *out, Image *img, int *visited, Point *contour, int *contour_len, int mcontour_len) {
-//   int direction[8][2] = {{0,-1}, {1,-1}, {1,0}, {1,1}, {0,1}, {-1,1}, {-1,0}, {-1,-1}};
-//   int ccount = 0;
-
-//   for (int y = 0; y < img->height; y++) {
-//     for (int x = 0; x < img->width; x++) {
-//       int idx = y * img->width + x;
-//       if (img->data[idx * img->channels] == 255 && !visited[idx]) {
-//         int func_x = x, func_y = y;
-//         // int dir_ind = 0;
-//         int start_x = x, start_y = y;
-//         int mstep = img->width * img->height;
-//         int yesc = 0;
-
-//         do {
-//           if (!inside(func_x, func_y, img->width, img->height)) break;
-//           if (*contour_len >= mcontour_len) break;
-
-//           contour[*contour_len].x = func_x;
-//           contour[*contour_len].y = func_y;
-//           (*contour_len)++;
-//           visited[func_y * img->width + func_x] = 1;
-
-//           int found = 0;
-//           for (int i = 0; i < 8; i++) {
-//             int nx = func_x + direction[i][0];
-//             int ny = func_y + direction[i][1];
-//             int nidx = ny * img->width + nx;
-
-//             if (inside(nx, ny, img->width, img->height) && img->data[nidx * img->channels] == 255 && !visited[nidx]) {
-//               out->data[nidx*out->channels + 0] = ccount%2 ? 255 : 0;
-//               out->data[nidx*out->channels + 1] = 0;
-//               out->data[nidx*out->channels + 2] = ccount%2 ? 0 : 255;
-//               func_x = nx;
-//               func_y = ny;
-//               // dir_ind = (nd + 6) % 8;
-//               found = 1;
-//               yesc = 1;
-//               break;
-//             }
-//           }
-
-//           if (!found || --mstep <= 0) break;
-//         } while (!(func_x == start_x && func_y == start_y));
-//         if(yesc){
-//           // printf("found contpur\n");
-//           ccount++;
-//         }
-//       }
-//     }
-//   }
-//   printf("count %d\n", ccount);
-// }
 
 void Image_crop(Image* cropped, Image* image, int x, int y){
   for (int i = 0; i < cropped->height; i++)
@@ -196,9 +176,10 @@ cJSON* read_json_file(const char* path) {
   long length = ftell(fp);
   rewind(fp);
 
-  char *buffer = (char*)malloc(length + 1);
+  char *buffer = (char*)amalloc(length + 1);
   if (buffer == NULL) {
       printf("Error: Memory allocation failed.\n");
+      afree(buffer);
       fclose(fp);
       return NULL;
   }
@@ -208,7 +189,7 @@ cJSON* read_json_file(const char* path) {
   fclose(fp);
 
   cJSON *json = cJSON_Parse(buffer);
-  free(buffer);
+  afree(buffer);
 
   if (json == NULL) {
       const char *error_ptr = cJSON_GetErrorPtr();
@@ -273,7 +254,7 @@ void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int widt
 char* OMR_get_chars(bool answers[], char chars[], int column, int row, bool primary){
   char* result;
   if (!primary){
-    result = (char*)malloc((column+1) * sizeof(char));
+    result = (char*)amalloc((column+1) * sizeof(char));
 
     for (int i = 0; i < column; i++){
       result[i] = ' ';
@@ -290,7 +271,7 @@ char* OMR_get_chars(bool answers[], char chars[], int column, int row, bool prim
     
     result[column] = '\0';
   } else {
-    result = (char*)malloc((row+1) * sizeof(char));
+    result = (char*)amalloc((row+1) * sizeof(char));
 
     for (int i = 0; i < row; i++){
       result[i] = ' ';
@@ -313,9 +294,23 @@ char* OMR_get_chars(bool answers[], char chars[], int column, int row, bool prim
 
 void OMR_get_choices(cJSON* subject, char* choice_arr, int array_length){
   cJSON* choices = cJSON_GetObjectItem(subject, "Choices");
+  if (!choices) {
+    printf("Error: 'Choices' array not found in subject.\n");
+    return;
+  }
+
   for (int i = 0; i < array_length; i++){
     cJSON* choice = cJSON_GetArrayItem(choices, i);
-    choice_arr[i] = (char)(choice->valuestring[0]);
+
+    // V-- ADD THIS SAFETY CHECK --V
+    if (!cJSON_IsString(choice) || (choice->valuestring == NULL)) {
+      choice_arr[i] = '?'; // Use a default/error character
+      continue;            // Skip to the next item in the loop
+    }
+    // ^-- END OF SAFETY CHECK --^
+
+    char* choiceStr = choice->valuestring;
+    choice_arr[i] = choiceStr[0];
   }
 }
 
@@ -330,9 +325,11 @@ char* OMR_get_subjectID(Image* img, cJSON* format){
   int widthNext = cJSON_GetObjectItem(subjectIDjson, "WidthNext")->valueint;
   int heightNext = cJSON_GetObjectItem(subjectIDjson, "HeightNext")->valueint;
   bool primary = cJSON_GetObjectItem(subjectIDjson,"Primary")->valueint;
-  bool readID[checkColumn * checkRow];
+  bool* readID = amalloc(checkColumn * checkRow * sizeof(bool));
   OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
-  return OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+  char* chars = OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+  afree(readID);
+  return chars;
 }
 
 char* OMR_get_studentID(Image* img, cJSON* format){
@@ -346,9 +343,11 @@ char* OMR_get_studentID(Image* img, cJSON* format){
   int widthNext = cJSON_GetObjectItem(studentIDjson, "WidthNext")->valueint;
   int heightNext = cJSON_GetObjectItem(studentIDjson, "HeightNext")->valueint;
   bool primary = cJSON_GetObjectItem(studentIDjson,"Primary")->valueint;
-  bool readID[checkColumn * checkRow];
+  bool* readID = amalloc(checkColumn * checkRow * sizeof(bool));
   OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
-  return OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+  char* getChar = OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
+  afree(readID);
+  return getChar;
 }
 
 int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
@@ -360,7 +359,7 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
   int sheetRow = cJSON_GetObjectItem(sheet,"Row")->valueint;
   int sheetWidthNext = cJSON_GetObjectItem(sheet,"WidthNext")->valueint;
   int sheetHeightNext = cJSON_GetObjectItem(sheet,"HeightNext")->valueint;
-  bool sheetPrimary = cJSON_GetObjectItem(sheet,"Primary")->valueint;
+  // bool sheetPrimary = cJSON_GetObjectItem(sheet,"Primary")->valueint;
 
   cJSON* question = cJSON_GetObjectItem(format,"Question");
 
@@ -372,11 +371,10 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
   int questionHeightNext = cJSON_GetObjectItem(question,"HeightNext")->valueint;
   bool questionPrimary = cJSON_GetObjectItem(question,"Primary")->valueint;
 
-  int score[sheetColumn * sheetRow];
   cJSON* biases = cJSON_GetObjectItem(subject, "BiasScore");
   int bias;
 
-  char choices[questionPrimary ? questionColumn : questionRow];
+  char* choices = amalloc((questionPrimary ? questionColumn : questionRow) * sizeof(char));
   OMR_get_choices(subject, choices, questionPrimary ? questionColumn : questionRow);
 
   cJSON* answers = cJSON_GetObjectItem(subject, "AnswerList");
@@ -386,16 +384,16 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
   int max_score = cJSON_GetObjectItem(subject, "MaxScore")->valueint;
   int current_score = 0;
 
-
   for (int i = 0; i < sheetColumn; i++)
   for (int j = 0; j < sheetRow; j++)
   {
     if (i*sheetRow+j >= answerCount) break;
     int checkX = sheetX + sheetWidthNext * i;
     int checkY = sheetY + sheetHeightNext * j;
-    bool readAnswer[questionColumn * questionRow];
+    bool* readAnswer = amalloc(questionColumn * questionRow * sizeof(bool));
     OMR_read(img, readAnswer, checkX, checkY, questionColumn, questionRow, questionWidth, questionHeight, questionWidthNext, questionHeightNext, questionPrimary);
     char* charsGet = OMR_get_chars(readAnswer, choices, questionColumn, questionRow, questionPrimary);
+    afree(readAnswer);
     answer = cJSON_GetArrayItem(answers, i*sheetRow+j)->valuestring;
     if (!strcmp(charsGet, answer)){
       Image_write_color(img, checkX, checkY, questionWidthNext*questionColumn, questionHeightNext*questionRow, 0, 255, 0, 0.7f);
@@ -424,9 +422,10 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
         // questionWidthNext*(questionPrimary ? questionColumn : 1), questionHeightNext*(questionPrimary ? 1 : questionRow), 255, (charsGet[k] == answer[k]) ? 127 : 0 , 0, 0.7f);
       }
     }
-    free(charsGet);
+    afree(charsGet);
     // printf("%d. %s\n",i*sheetRow+j+1,charsGet);
   }
+  afree(choices);
 
   if (current_score > max_score){
     current_score = max_score;
@@ -440,7 +439,15 @@ void OMR_get_values(Image* img, cJSON* json_data, int formatID, char** subjectID
   *subjectID = OMR_get_subjectID(img, used_format);
   cJSON* used_subject = OMR_get_subject(json_data, *subjectID);
   *studentID = OMR_get_studentID(img, used_format);
+  if (!used_subject){
+    printf("Unknown subject ID %s\n", *subjectID);
+    *score = -1;
+    printf("Return with unknown subject\n");
+    return;
+  }
+  printf("Getting score...\n");
   *score = OMR_get_score(img, used_format, used_subject);
+  printf("Got values\n");
 }
 
 #define MAX_FILES 100
@@ -555,7 +562,7 @@ int main(int argc, char *argv[]) {
     OMR_get_values(&img, json_data, formatID, &subjectID, &studentID, &score);
 
     printf("Image path: %s\nStudent: %s | Subject: %s | Score: %d\n", full_path, studentID, subjectID, score);
-    fprintf(csv, "%s,%s,%d\n", studentID, subjectID, score);
+    fprintf(csv, "%s,\"%s\",%d\n", studentID, subjectID, score);
 
     // Save image
     char name_no_ext[256];
@@ -570,11 +577,11 @@ int main(int argc, char *argv[]) {
     Image_save(&img, output_image_path);
 
     Image_free(&img);
-    free(subjectID);
-    free(studentID);
+    afree(subjectID);
+    afree(studentID);
 
     if (has_dash_d) {
-      free(image_paths[i]); // Because strdup was used
+      afree(image_paths[i]); // Because strdup was used
     }
   }
 
