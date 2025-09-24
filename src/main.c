@@ -21,13 +21,12 @@
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define Threshold 212
-#define MinorThreshold 232
+int Threshold = 212;
 #define AlignmentThreshold 128
 #define AlignmentBlackCount 25
 #define SkipAlignment 20
 
-#define Debug true
+bool Debug = false;
 #define MallocDebug false
 
 #define amalloc(X) my_malloc( X, __FILE__, __LINE__, __FUNCTION__)
@@ -141,11 +140,11 @@ void Image_greyscale(Image* img){
     }
 }
 
-char Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value, unsigned char minor_value){
+char Image_most_black(Image* img, int x, int y, int width, int height, unsigned char pass_value){
   float pi = 3.1415927;
   int area = (int)(width * height * pi / 4);
   int shade = 0;
-  unsigned int calculated_value = 0;
+  float calculated_value = 0;
 
   int min_x = MIN(img->width, x+width);
   int min_y = MIN(img->height, y+height);
@@ -155,16 +154,6 @@ char Image_most_black(Image* img, int x, int y, int width, int height, unsigned 
     }
   calculated_value = shade / area;
   if (calculated_value <= pass_value) return 1;
-
-  shade = 0;
-  min_x += 4;
-  min_y += 4;
-  for (int i = y; i < min_y; i++)
-    for (int j = x; j < min_x; j++) {
-      shade += img->data[(i * img->width + j) * img->channels];
-    }
-
-  if (calculated_value <= minor_value) return 2;
   return 0;
 }
 
@@ -228,7 +217,7 @@ int index_of_char(const char *arr, char target) {
     return -1;
 }
 
-void OMR_read(Image* img, char* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext, bool primary){
+void OMR_read(Image* img, bool* ans, int x, int y, int column, int row, int width, int height, int widthNext, int heightNext, bool primary){
   if(!primary){
     for (int j = 0; j < row; j++)
     {
@@ -236,7 +225,7 @@ void OMR_read(Image* img, char* ans, int x, int y, int column, int row, int widt
       {
         int check_x = x + widthNext * i;
         int check_y = y + heightNext * j;
-        ans[i * row + j] = Image_most_black(img, check_x, check_y, width, height, Threshold, MinorThreshold);
+        ans[i * row + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
         if (Debug)
           Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * row + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
       }
@@ -248,7 +237,7 @@ void OMR_read(Image* img, char* ans, int x, int y, int column, int row, int widt
       {
         int check_x = x + widthNext * j;
         int check_y = y + heightNext * i;
-        ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold, MinorThreshold);
+        ans[i * column + j] = Image_most_black(img, check_x, check_y, width, height, Threshold);
         if (Debug)
           Image_write_color(img, check_x, check_y, width, height, ((i+j)%2 == 0) ? 255 : 0, ans[i * column + j] ? 255 : 0, ((i+j)%2 == 0) ? 0 : 255, 1);
       }
@@ -256,19 +245,15 @@ void OMR_read(Image* img, char* ans, int x, int y, int column, int row, int widt
   }
 }
 
-char* OMR_get_chars(char answers[], char chars[], int column, int row, bool primary){
+char* OMR_get_chars(bool answers[], char chars[], int column, int row, bool primary){
   char* result;
-  bool bold;
   if (!primary){
     result = (char*)amalloc((column+1) * sizeof(char));
 
     for (int i = 0; i < column; i++){
       result[i] = ' ';
-      bold = false;
       for (int j = 0; j < row; j++){
-        if (answers[i * row + j] > 0){
-          if (answers[i * row + j] == 1) bold = true;
-          if (answers[i * row + j] == 2 && bold) continue;
+        if (answers[i * row + j]){
           if (result[i] != ' '){
             result[i] = '$';
             break;
@@ -284,11 +269,8 @@ char* OMR_get_chars(char answers[], char chars[], int column, int row, bool prim
 
     for (int i = 0; i < row; i++){
       result[i] = ' ';
-      bold = false;
       for (int j = 0; j < column; j++){
         if (answers[i * column + j] > 0){
-          if (answers[i * column + j] == 1) bold = true;
-          if (answers[i * column + j] == 2 && bold) continue;
           if (result[i] != ' '){
             result[i] = '$';
             break;
@@ -335,7 +317,7 @@ char* OMR_get_subjectID(Image* img, cJSON* format){
   int widthNext = cJSON_GetObjectItem(subjectIDjson, "WidthNext")->valueint;
   int heightNext = cJSON_GetObjectItem(subjectIDjson, "HeightNext")->valueint;
   bool primary = cJSON_GetObjectItem(subjectIDjson,"Primary")->valueint;
-  char* readID = amalloc(checkColumn * checkRow * sizeof(char));
+  bool* readID = amalloc(checkColumn * checkRow * sizeof(bool));
   OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
   char* chars = OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
   afree(readID);
@@ -353,7 +335,7 @@ char* OMR_get_studentID(Image* img, cJSON* format){
   int widthNext = cJSON_GetObjectItem(studentIDjson, "WidthNext")->valueint;
   int heightNext = cJSON_GetObjectItem(studentIDjson, "HeightNext")->valueint;
   bool primary = cJSON_GetObjectItem(studentIDjson,"Primary")->valueint;
-  char* readID = amalloc(checkColumn * checkRow * sizeof(char));
+  bool* readID = amalloc(checkColumn * checkRow * sizeof(bool));
   OMR_read(img, readID, checkX, checkY, checkColumn, checkRow, width, height, widthNext, heightNext, primary);
   char* getChar = OMR_get_chars(readID, default_chars, checkColumn, checkRow, primary);
   afree(readID);
@@ -400,7 +382,7 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
     if (i*sheetRow+j >= answerCount) break;
     int checkX = sheetX + sheetWidthNext * i;
     int checkY = sheetY + sheetHeightNext * j;
-    char* readAnswer = amalloc(questionColumn * questionRow * sizeof(char));
+    bool* readAnswer = amalloc(questionColumn * questionRow * sizeof(char));
     OMR_read(img, readAnswer, checkX, checkY, questionColumn, questionRow, questionWidth, questionHeight, questionWidthNext, questionHeightNext, questionPrimary);
     char* charsGet = OMR_get_chars(readAnswer, choices, questionColumn, questionRow, questionPrimary);
     afree(readAnswer);
@@ -413,16 +395,19 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject){
       int slen = strlen(charsGet);
       for (int k = 0; k < slen; k++){
         if (charsGet[k] != answer[k]){
-          int index = index_of_char(choices, answer[k]);
-          if (index != 0){
-            Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
-            questionWidthNext*(questionPrimary ? index : 1), questionHeightNext*(questionPrimary ? 1 : index), 255, 0, 0, 0.7f);
-          }
-          Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index : k), checkY+questionHeightNext*(questionPrimary ? k : index),
-          questionWidthNext, questionHeightNext, 0, 255, 0, 0.7f);
-          if (index != (questionPrimary ? questionColumn : questionRow)){
-            Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index+1 : k), checkY+questionHeightNext*(questionPrimary ? k : index+1),
-            questionWidthNext*(questionPrimary ? questionColumn-index-1 : 1), questionHeightNext*(questionPrimary ? 1 : questionRow-index-1), 255, 0, 0, 0.7f);
+          if (!Debug){
+            int index = index_of_char(choices, answer[k]);
+            printf("%d %s %s\n", k, charsGet[k], answer[k]);
+            if (index != 0){
+              Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
+              questionWidthNext*(questionPrimary ? index : 1), questionHeightNext*(questionPrimary ? 1 : index), 255, 0, 0, 0.7f);
+              Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index : k), checkY+questionHeightNext*(questionPrimary ? k : index),
+              questionWidthNext, questionHeightNext, 0, 255, 0, 0.7f);
+            }
+            if (index != (questionPrimary ? questionColumn : questionRow)){
+              Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? index+1 : k), checkY+questionHeightNext*(questionPrimary ? k : index+1),
+              questionWidthNext*(questionPrimary ? questionColumn-index-1 : 1), questionHeightNext*(questionPrimary ? 1 : questionRow-index-1), 255, 0, 0, 0.7f);
+            }
           }
         } else {
           Image_write_color(img, checkX+questionWidthNext*(questionPrimary ? 0 : k), checkY+questionHeightNext*(questionPrimary ? k : 0),
@@ -619,7 +604,7 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] -f format_file -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] -f format_file -o output_dir [--debug] [-t threshold]\n", argv[0]);
     return 1;
   }
 
@@ -641,6 +626,10 @@ int main(int argc, char *argv[]) {
       image_paths[image_count++] = argv[i];
     } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
       format_file = argv[++i];
+    } else if (strcmp(argv[i], "--debug") == 0){
+      Debug = true;
+    } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
+      Threshold = atoi(argv[++i]);
     }
   }
 
