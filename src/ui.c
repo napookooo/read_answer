@@ -102,7 +102,7 @@ static void db_dialog_response(GtkDialog *dialog, int response, gpointer user_da
 
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
-             "mongoimport --uri 'mongodb://%s:%s@%s' --db=Answer_database --collection=%s --file='%s/result.csv'",
+             "mongoimport --uri 'mongodb://%s:%s@%s' --db=Answer_database --collection=%s --type=csv --headerline --file='%s/results.csv'",
              db_creds->username,
              db_creds->password,
              db_creds->ip,
