@@ -17,10 +17,11 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#define TrueColor(x) ((x) < 127) ? 255 : 0
 #define ColorInRange(x) (x >= 0 && x <= 255)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+int BlackThreshold = 128;
 int Threshold = 128;
 int MinorThreshold1 = 144;
 int MinorThreshold2 = 160;
@@ -169,7 +170,7 @@ char Image_most_black(Image* img, int x, int y, int width, int height){
   for (int i = y; i < min_y; i++)
     for (int j = x; j < min_x; j++) {
       
-      if (img->data[(i * img->width + j) * img->channels] < 128) continue;
+      if (img->data[(i * img->width + j) * img->channels] < BlackThreshold) continue;
       shade += img->data[(i * img->width + j) * img->channels];
     }
   calculated_value = shade / area;
@@ -268,110 +269,110 @@ void OMR_read(Image* img, char* ans, float x, float y, int column, int row, floa
   }
 }
 
-char* OMR_get_chars(char answers[], char chars[], int column, int row, bool primary){
-  char* result;
-  uint8_t bold = 0;
-  char thisAnswer;
-  if (!primary){
-    result = (char*)amalloc((column+1) * sizeof(char));
-    for (int i = 0; i < column; i++){
-      result[i] = ' ';
-      bold = 0;
-      for (int j = 0; j < row; j++){
-        thisAnswer = answers[i * row + j];
-        if (thisAnswer <= 0) continue;
-        if (thisAnswer == 1){ // Highest priority
-          if (result[i] != ' ' && bold == 1){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 1;
+char* OMR_get_chars(char answers[], char chars[], int column, int row, bool primary) {
+    char* result;
+    uint8_t bold;
+    char thisAnswer;
+
+    if (!primary) {
+        result = (char*)amalloc((column + 1) * sizeof(char));
+
+        for (int i = 0; i < column; i++) {
+            result[i] = ' ';
+            bold = 0;
+
+            for (int j = 0; j < row; j++) {
+                thisAnswer = answers[i * row + j];
+                if (thisAnswer <= 0) continue;
+
+                if (thisAnswer == 1) {
+                    if (result[i] != ' ' && bold == 1) {
+                        result[i] = '@';
+                        break;
+                    }
+                    result[i] = chars[j];
+                    bold = 1;
+                }
+                else if (thisAnswer == 2 && bold > 1) {
+                    if (result[i] != ' ' && bold == 2) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 2;
+                }
+                else if (thisAnswer == 3 && bold > 2) {
+                    if (result[i] != ' ' && bold == 3) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 3;
+                }
+                else if (thisAnswer == 4 && bold > 3) {
+                    if (result[i] != ' ' && bold == 4) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 4;
+                }
+                else if (thisAnswer > 4) {
+                    printf("Unknown value %d\n", thisAnswer);
+                }
+            }
         }
-        else if (thisAnswer == 2 && bold > 1){
-          if (result[i] != ' ' && bold == 2){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 2;
+
+        result[column] = '\0';
+    } else {
+        result = (char*)amalloc((row + 1) * sizeof(char));
+
+        for (int i = 0; i < row; i++) {
+            result[i] = ' ';
+            bold = 0;
+
+            for (int j = 0; j < column; j++) {
+                thisAnswer = answers[i * column + j];
+                if (thisAnswer <= 0) continue;
+
+                if (thisAnswer == 1) {
+                    if (result[i] != ' ' && bold == 1) {
+                        result[i] = '@';
+                        break;
+                    }
+                    result[i] = chars[j];
+                    bold = 1;
+                }
+                else if (thisAnswer == 2 && bold > 1) {
+                    if (result[i] != ' ' && bold == 2) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 2;
+                }
+                else if (thisAnswer == 3 && bold > 2) {
+                    if (result[i] != ' ' && bold == 3) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 3;
+                }
+                else if (thisAnswer == 4 && bold > 3) {
+                    if (result[i] != ' ' && bold == 4) {
+                        result[i] = '@';
+                    }
+                    result[i] = chars[j];
+                    bold = 4;
+                }
+                else if (thisAnswer > 4) {
+                    printf("Unknown value %d\n", thisAnswer);
+                }
+            }
         }
-        else if (thisAnswer == 3 && bold > 2){
-          if (result[i] != ' ' && bold == 3){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 3;
-        }
-        else if (thisAnswer == 4 && bold > 3){
-          if (result[i] != ' ' && bold == 4){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 4;
-          }
-        else if (thisAnswer > 4) {
-          printf("Unknown value %d\n", thisAnswer);
-        }
-      }
+
+        result[row] = '\0';
     }
-    
-    result[column] = '\0';
-  } else {
-    result = (char*)amalloc((row+1) * sizeof(char));
 
-    for (int i = 0; i < row; i++){
-      result[i] = ' ';
-      bold = 0;
-      for (int j = 0; j < column; j++){
-        thisAnswer = answers[i * column + j];
-        if (thisAnswer <= 0) continue;
-
-        if (thisAnswer == 1){ // Highest priority
-          if (result[i] != ' ' && bold == 1){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 1;
-        }
-        else if (thisAnswer == 2 && bold > 1){
-          if (result[i] != ' ' && bold == 2){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 2;
-        }
-        else if (thisAnswer == 3 && bold > 2){
-          if (result[i] != ' ' && bold == 3){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 3;
-        }
-        else if (thisAnswer == 4 && bold > 3){
-          if (result[i] != ' ' && bold == 4){
-            result[i] = '@';
-            break;
-          }
-          result[i] = chars[j];
-          bold = 4;
-          }
-        else if (thisAnswer > 4){
-          printf("Unknown value %d\n", thisAnswer);
-        }
-      }
-    }
-
-    result[row] = '\0';
-  }
-
-  return result;
+    return result;
 }
+
 
 void OMR_get_choices(cJSON* subject, char* choice_arr, int array_length){
   cJSON* choices = cJSON_GetObjectItem(subject, "Choices");
@@ -501,7 +502,7 @@ int OMR_get_score(Image* img, cJSON* format, cJSON* subject, int* cdx, int* cdy)
             }
             if (boldType > 0) boldType--;
             Image_write_color(img, (int)(checkX+questionWidthNext*(questionPrimary ? index : k)), (int)(checkY+questionHeightNext*(questionPrimary ? k : index)),
-            (int)(questionWidthNext), (int)(questionHeightNext), 0, 255, 32*boldType, 0.7f);
+            (int)(questionWidthNext), (int)(questionHeightNext), 0, 255, 63*boldType, 0.7f);
           }
           if (index != (questionPrimary ? questionColumn : questionRow)){
             Image_write_color(img, (int)(checkX+questionWidthNext*(questionPrimary ? index+1 : k)), (int)(checkY+questionHeightNext*(questionPrimary ? k : index+1)),
@@ -715,7 +716,7 @@ bool is_image_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   if (argc < 4) {
-    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] [--mdebug] [-t threshold] [-mt1 minor_threshold_1] [-mt2 minor_threshold_2] [-mt3 minor_threshold_3] -f format_file -o output_dir\n", argv[0]);
+    printf("Usage: %s [image names or paths] [-d input_dir] [--debug] [--mdebug] [-bt black_threshold] [-t threshold] [-mt1 minor_threshold_1] [-mt2 minor_threshold_2] [-mt3 minor_threshold_3] -f format_file -o output_dir\n", argv[0]);
     return 1;
   }
 
@@ -749,22 +750,24 @@ int main(int argc, char *argv[]) {
       MinorThreshold2 = atoi(argv[++i]);
     } else if (strcmp(argv[i], "-mt3") == 0 && i + 1 < argc) {
       MinorThreshold3 = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "-bt") == 0 && i + 1 < argc) {
+      BlackThreshold = atoi(argv[++i]);
     }
   }
 
   // Auto clarify threshold
   // Add threshold
-  if (Threshold >= MinorThreshold1)
+  if (Threshold >= MinorThreshold1 && MinorThreshold1 != 0)
   {
     MinorThreshold1 = Threshold + 16;
   }
 
-  if (MinorThreshold1 >= MinorThreshold2)
+  if (MinorThreshold1 >= MinorThreshold2 && MinorThreshold2 != 0)
   {
     MinorThreshold2 = MinorThreshold1 + 16;
   }
 
-  if (MinorThreshold2 >= MinorThreshold3)
+  if (MinorThreshold2 >= MinorThreshold3 && MinorThreshold3 != 0)
   {
     MinorThreshold3 = MinorThreshold3 + 16;
   }
